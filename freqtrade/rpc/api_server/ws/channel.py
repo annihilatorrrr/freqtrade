@@ -29,7 +29,7 @@ class WebSocketChannel:
         channel_id: Optional[str] = None,
         serializer_cls: Type[WebSocketSerializer] = HybridJSONWebSocketSerializer
     ):
-        self.channel_id = channel_id if channel_id else uuid4().hex[:8]
+        self.channel_id = channel_id or uuid4().hex[:8]
         self._websocket = WebSocketProxy(websocket)
 
         # Internal event to signify a closed websocket

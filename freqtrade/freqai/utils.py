@@ -87,9 +87,7 @@ def get_required_data_timerange(config: Config) -> TimeRange:
         - additional_seconds
     )
     stopts = int(time)
-    data_load_timerange = TimeRange('date', 'date', startts, stopts)
-
-    return data_load_timerange
+    return TimeRange('date', 'date', startts, stopts)
 
 
 # Keep below for when we wish to download heterogeneously lengthed data for FreqAI.

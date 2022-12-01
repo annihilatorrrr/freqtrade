@@ -25,7 +25,6 @@ router = APIRouter()
 
 
 @router.post('/backtest', response_model=BacktestResponse, tags=['webserver', 'backtest'])
-# flake8: noqa: C901
 async def api_start_backtest(bt_settings: BacktestRequest, background_tasks: BackgroundTasks,
                              config=Depends(get_config), ws_mode=Depends(is_webserver_mode)):
     """Start backtesting if not done so already"""
@@ -38,7 +37,7 @@ async def api_start_backtest(bt_settings: BacktestRequest, background_tasks: Bac
     btconfig = deepcopy(config)
     settings = dict(bt_settings)
     # Pydantic models will contain all keys, but non-provided ones are None
-    for setting in settings.keys():
+    for setting in settings:
         if settings[setting] is not None:
             btconfig[setting] = settings[setting]
     try:
@@ -117,7 +116,6 @@ async def api_start_backtest(bt_settings: BacktestRequest, background_tasks: Bac
 
         except DependencyException as e:
             logger.info(f"Backtesting caused an error: {e}")
-            pass
         finally:
             ApiServer._bgtask_running = False
 
@@ -150,23 +148,24 @@ def api_get_backtest(ws_mode=Depends(is_webserver_mode)):
             "status_msg": "Backtest running",
         }
 
-    if not ApiServer._bt:
-        return {
+    return (
+        {
+            "status": "ended",
+            "running": False,
+            "status_msg": "Backtest ended",
+            "step": "finished",
+            "progress": 1,
+            "backtest_result": ApiServer._bt.results,
+        }
+        if ApiServer._bt
+        else {
             "status": "not_started",
             "running": False,
             "step": "",
             "progress": 0,
-            "status_msg": "Backtest not yet executed"
+            "status_msg": "Backtest not yet executed",
         }
-
-    return {
-        "status": "ended",
-        "running": False,
-        "status_msg": "Backtest ended",
-        "step": "finished",
-        "progress": 1,
-        "backtest_result": ApiServer._bt.results,
-    }
+    )
 
 
 @router.delete('/backtest', response_model=BacktestResponse, tags=['webserver', 'backtest'])

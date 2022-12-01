@@ -193,11 +193,7 @@ class BaseReinforcementLearningModel(IFreqaiModel):
                 now = datetime.now(timezone.utc).timestamp()
                 trade_duration = int((now - trade.open_date_utc.timestamp()) / self.base_tf_seconds)
                 current_profit = trade.calc_profit_ratio(current_rate)
-                if trade.is_short:
-                    market_side = 0
-                else:
-                    market_side = 1
-
+                market_side = 0 if trade.is_short else 1
         return market_side, current_profit, int(trade_duration)
 
     def predict(
@@ -294,8 +290,7 @@ class BaseReinforcementLearningModel(IFreqaiModel):
         perform continual learning.
         For now, this is unused.
         """
-        exists = Path(dk.data_path / f"{dk.model_filename}_model").is_file()
-        if exists:
+        if exists := Path(dk.data_path / f"{dk.model_filename}_model").is_file():
             model = self.MODELCLASS.load(dk.data_path / f"{dk.model_filename}_model")
         else:
             logger.info('No model file on disk to continue learning from.')
@@ -352,7 +347,7 @@ class BaseReinforcementLearningModel(IFreqaiModel):
 
             if trade_duration <= max_trade_duration:
                 factor *= 1.5
-            elif trade_duration > max_trade_duration:
+            else:
                 factor *= 0.5
 
             # discourage sitting in position

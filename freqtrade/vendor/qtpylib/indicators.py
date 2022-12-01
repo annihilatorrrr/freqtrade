@@ -209,11 +209,7 @@ def true_range(bars):
 def atr(bars, window=14, exp=False):
     tr = true_range(bars)
 
-    if exp:
-        res = rolling_weighted_mean(tr, window)
-    else:
-        res = rolling_mean(tr, window)
-
+    res = rolling_weighted_mean(tr, window) if exp else rolling_mean(tr, window)
     return pd.Series(res)
 
 
@@ -254,11 +250,10 @@ def rolling_std(series, window=200, min_periods=None):
     min_periods = window if min_periods is None else min_periods
     if min_periods == window and len(series) > window:
         return numpy_rolling_std(series, window, True)
-    else:
-        try:
-            return series.rolling(window=window, min_periods=min_periods).std()
-        except Exception as e:  # noqa: F841
-            return pd.Series(series).rolling(window=window, min_periods=min_periods).std()
+    try:
+        return series.rolling(window=window, min_periods=min_periods).std()
+    except Exception as e:  # noqa: F841
+        return pd.Series(series).rolling(window=window, min_periods=min_periods).std()
 
 # ---------------------------------------------
 
@@ -267,11 +262,10 @@ def rolling_mean(series, window=200, min_periods=None):
     min_periods = window if min_periods is None else min_periods
     if min_periods == window and len(series) > window:
         return numpy_rolling_mean(series, window, True)
-    else:
-        try:
-            return series.rolling(window=window, min_periods=min_periods).mean()
-        except Exception as e:  # noqa: F841
-            return pd.Series(series).rolling(window=window, min_periods=min_periods).mean()
+    try:
+        return series.rolling(window=window, min_periods=min_periods).mean()
+    except Exception as e:  # noqa: F841
+        return pd.Series(series).rolling(window=window, min_periods=min_periods).mean()
 
 # ---------------------------------------------
 

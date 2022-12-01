@@ -380,7 +380,7 @@ class IFreqaiModel(ABC):
                 self.scanning = True
                 self.start_scanning(strategy)
 
-        elif self.follow_mode:
+        else:
             dk.set_paths(metadata["pair"], trained_timestamp)
             logger.info(
                 "FreqAI instance set to follow_mode, finding existing pair "
@@ -736,12 +736,11 @@ class IFreqaiModel(ABC):
         return
 
     def get_init_model(self, pair: str) -> Any:
-        if pair not in self.dd.model_dictionary or not self.continual_learning:
-            init_model = None
-        else:
-            init_model = self.dd.model_dictionary[pair]
-
-        return init_model
+        return (
+            None
+            if pair not in self.dd.model_dictionary or not self.continual_learning
+            else self.dd.model_dictionary[pair]
+        )
 
     def _set_train_queue(self):
         """
@@ -845,8 +844,9 @@ class IFreqaiModel(ABC):
         the type of logic implemented by the user.
         :param dk: datakitchen object
         """
-        fit_live_predictions_candles = self.freqai_info.get("fit_live_predictions_candles", 0)
-        if fit_live_predictions_candles:
+        if fit_live_predictions_candles := self.freqai_info.get(
+            "fit_live_predictions_candles", 0
+        ):
             logger.info("Applying fit_live_predictions in backtesting")
             label_columns = [col for col in dk.full_df.columns if (
                 col.startswith("&") and

@@ -25,9 +25,7 @@ async def ui_version():
     uibase = Path(__file__).parent / 'ui/installed/'
     version = read_ui_version(uibase)
 
-    return {
-        "version": version if version else "not_installed",
-    }
+    return {"version": version or "not_installed"}
 
 
 def is_relative_to(path, base) -> bool:
@@ -49,17 +47,13 @@ async def index_html(rest_of_path: str):
         raise HTTPException(status_code=404, detail="Not Found")
     uibase = Path(__file__).parent / 'ui/installed/'
     filename = uibase / rest_of_path
-    # It's security relevant to check "relative_to".
-    # Without this, Directory-traversal is possible.
-    media_type: Optional[str] = None
-    if filename.suffix == '.js':
-        # Force text/javascript for .js files - Circumvent faulty system configuration
-        media_type = 'application/javascript'
+    media_type = 'application/javascript' if filename.suffix == '.js' else None
     if filename.is_file() and is_relative_to(filename, uibase):
         return FileResponse(str(filename), media_type=media_type)
 
     index_file = uibase / 'index.html'
-    if not index_file.is_file():
-        return FileResponse(str(uibase.parent / 'fallback_file.html'))
-    # Fall back to index.html, as indicated by vue router docs
-    return FileResponse(str(index_file))
+    return (
+        FileResponse(str(index_file))
+        if index_file.is_file()
+        else FileResponse(str(uibase.parent / 'fallback_file.html'))
+    )

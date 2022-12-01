@@ -497,27 +497,49 @@ class Hyperopt:
             return self.opt.ask(n_points=n_points), [False for _ in range(n_points)]
 
     def get_progressbar_widgets(self):
-        if self.print_colorized:
-            widgets = [
-                ' [Epoch ', progressbar.Counter(), ' of ', str(self.total_epochs),
-                ' (', progressbar.Percentage(), ')] ',
-                progressbar.Bar(marker=progressbar.AnimatedMarker(
-                    fill='\N{FULL BLOCK}',
-                    fill_wrap=Fore.GREEN + '{}' + Fore.RESET,
-                    marker_wrap=Style.BRIGHT + '{}' + Style.RESET_ALL,
-                )),
-                ' [', progressbar.ETA(), ', ', progressbar.Timer(), ']',
+        return (
+            [
+                ' [Epoch ',
+                progressbar.Counter(),
+                ' of ',
+                str(self.total_epochs),
+                ' (',
+                progressbar.Percentage(),
+                ')] ',
+                progressbar.Bar(
+                    marker=progressbar.AnimatedMarker(
+                        fill='\N{FULL BLOCK}',
+                        fill_wrap=Fore.GREEN + '{}' + Fore.RESET,
+                        marker_wrap=Style.BRIGHT + '{}' + Style.RESET_ALL,
+                    )
+                ),
+                ' [',
+                progressbar.ETA(),
+                ', ',
+                progressbar.Timer(),
+                ']',
             ]
-        else:
-            widgets = [
-                ' [Epoch ', progressbar.Counter(), ' of ', str(self.total_epochs),
-                ' (', progressbar.Percentage(), ')] ',
-                progressbar.Bar(marker=progressbar.AnimatedMarker(
-                    fill='\N{FULL BLOCK}',
-                )),
-                ' [', progressbar.ETA(), ', ', progressbar.Timer(), ']',
+            if self.print_colorized
+            else [
+                ' [Epoch ',
+                progressbar.Counter(),
+                ' of ',
+                str(self.total_epochs),
+                ' (',
+                progressbar.Percentage(),
+                ')] ',
+                progressbar.Bar(
+                    marker=progressbar.AnimatedMarker(
+                        fill='\N{FULL BLOCK}',
+                    )
+                ),
+                ' [',
+                progressbar.ETA(),
+                ', ',
+                progressbar.Timer(),
+                ']',
             ]
-        return widgets
+        )
 
     def evaluate_result(self, val: Dict[str, Any], current: int, is_random: bool):
         """

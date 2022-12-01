@@ -63,7 +63,7 @@ class CryptoToFiatConverter(LoggingMixin):
     def _load_cryptomap(self) -> None:
         try:
             # Use list-comprehension to ensure we get a list.
-            self._coinlistings = [x for x in self._coingekko.get_coins_list()]
+            self._coinlistings = list(self._coingekko.get_coins_list())
         except RequestException as request_exception:
             if "429" in str(request_exception):
                 logger.warning(
@@ -73,23 +73,19 @@ class CryptoToFiatConverter(LoggingMixin):
                 return
             # If the request is not a 429 error we want to raise the normal error
             logger.error(
-                "Could not load FIAT Cryptocurrency map for the following problem: {}".format(
-                    request_exception
-                )
+                f"Could not load FIAT Cryptocurrency map for the following problem: {request_exception}"
             )
+
         except (Exception) as exception:
             logger.error(
                 f"Could not load FIAT Cryptocurrency map for the following problem: {exception}")
 
     def _get_gekko_id(self, crypto_symbol):
+        if self._backoff <= datetime.now().timestamp() and not self._coinlistings:
+            self._load_cryptomap()
+        # Still not loaded.
         if not self._coinlistings:
-            if self._backoff <= datetime.now().timestamp():
-                self._load_cryptomap()
-                # Still not loaded.
-                if not self._coinlistings:
-                    return None
-            else:
-                return None
+            return None
         found = [x for x in self._coinlistings if x['symbol'].lower() == crypto_symbol]
 
         if crypto_symbol in coingecko_mapping.keys():
@@ -98,7 +94,7 @@ class CryptoToFiatConverter(LoggingMixin):
         if len(found) == 1:
             return found[0]['id']
 
-        if len(found) > 0:
+        if found:
             # Wrong!
             logger.warning(f"Found multiple mappings in CoinGecko for {crypto_symbol}.")
             return None
@@ -112,9 +108,9 @@ class CryptoToFiatConverter(LoggingMixin):
         :return: float, value in fiat of the crypto-currency amount
         """
         if crypto_symbol == fiat_symbol:
-            return float(crypto_amount)
+            return crypto_amount
         price = self.get_price(crypto_symbol=crypto_symbol, fiat_symbol=fiat_symbol)
-        return float(crypto_amount) * float(price)
+        return crypto_amount * float(price)
 
     def get_price(self, crypto_symbol: str, fiat_symbol: str) -> float:
         """

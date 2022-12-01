@@ -33,11 +33,7 @@ def main(sysargv: List[str] = None) -> None:
         arguments = Arguments(sysargv)
         args = arguments.get_parsed_arg()
 
-        # Call subcommand.
-        if 'func' in args:
-            logger.info(f'freqtrade {__version__}')
-            return_code = args['func'](args)
-        else:
+        if 'func' not in args:
             # No subcommand was issued.
             raise OperationalException(
                 "Usage of Freqtrade requires a subcommand to be specified.\n"
@@ -48,6 +44,8 @@ def main(sysargv: List[str] = None) -> None:
                 "`freqtrade --help` or `freqtrade <command> --help`."
             )
 
+        logger.info(f'freqtrade {__version__}')
+        return_code = args['func'](args)
     except SystemExit as e:  # pragma: no cover
         return_code = e
     except KeyboardInterrupt:

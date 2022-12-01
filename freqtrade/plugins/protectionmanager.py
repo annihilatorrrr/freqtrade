@@ -53,10 +53,15 @@ class ProtectionManager():
         for protection_handler in self._protection_handlers:
             if protection_handler.has_global_stop:
                 lock = protection_handler.global_stop(date_now=now, side=side)
-                if lock and lock.until:
-                    if not PairLocks.is_global_lock(lock.until, side=lock.lock_side):
-                        result = PairLocks.lock_pair(
-                            '*', lock.until, lock.reason, now=now, side=lock.lock_side)
+                if (
+                    lock
+                    and lock.until
+                    and not PairLocks.is_global_lock(
+                        lock.until, side=lock.lock_side
+                    )
+                ):
+                    result = PairLocks.lock_pair(
+                        '*', lock.until, lock.reason, now=now, side=lock.lock_side)
         return result
 
     def stop_per_pair(self, pair, now: Optional[datetime] = None,
@@ -68,8 +73,13 @@ class ProtectionManager():
             if protection_handler.has_local_stop:
                 lock = protection_handler.stop_per_pair(
                     pair=pair, date_now=now, side=side)
-                if lock and lock.until:
-                    if not PairLocks.is_pair_locked(pair, lock.until, lock.lock_side):
-                        result = PairLocks.lock_pair(
-                            pair, lock.until, lock.reason, now=now, side=lock.lock_side)
+                if (
+                    lock
+                    and lock.until
+                    and not PairLocks.is_pair_locked(
+                        pair, lock.until, lock.lock_side
+                    )
+                ):
+                    result = PairLocks.lock_pair(
+                        pair, lock.until, lock.reason, now=now, side=lock.lock_side)
         return result

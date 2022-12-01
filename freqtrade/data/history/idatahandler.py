@@ -244,15 +244,14 @@ class IDataHandler(ABC):
         if candle_type != CandleType.SPOT:
             datadir = datadir.joinpath('futures')
             candle = f"-{candle_type}"
-        filename = datadir.joinpath(
-            f'{pair_s}-{timeframe}{candle}.{cls._get_file_extension()}')
-        return filename
+        return datadir.joinpath(
+            f'{pair_s}-{timeframe}{candle}.{cls._get_file_extension()}'
+        )
 
     @classmethod
     def _pair_trades_filename(cls, datadir: Path, pair: str) -> Path:
         pair_s = misc.pair_to_filename(pair)
-        filename = datadir.joinpath(f'{pair_s}-trades.{cls._get_file_extension()}')
-        return filename
+        return datadir.joinpath(f'{pair_s}-trades.{cls._get_file_extension()}')
 
     @staticmethod
     def timeframe_to_file(timeframe: str):
@@ -308,9 +307,9 @@ class IDataHandler(ABC):
             timerange=timerange_startup,
             candle_type=candle_type
         )
-        if self._check_empty_df(pairdf, pair, timeframe, candle_type, warn_no_data, True):
-            return pairdf
-        else:
+        if not self._check_empty_df(
+            pairdf, pair, timeframe, candle_type, warn_no_data, True
+        ):
             enddate = pairdf.iloc[-1]['date']
 
             if timerange_startup:
@@ -326,7 +325,7 @@ class IDataHandler(ABC):
                                            drop_incomplete=(drop_incomplete and
                                                             enddate == pairdf.iloc[-1]['date']))
             self._check_empty_df(pairdf, pair, timeframe, candle_type, warn_no_data)
-            return pairdf
+        return pairdf
 
     def _check_empty_df(
             self, pairdf: DataFrame, pair: str, timeframe: str, candle_type: CandleType,
@@ -343,9 +342,11 @@ class IDataHandler(ABC):
             return True
         elif warn_price:
             candle_price_gap = 0
-            if (candle_type in (CandleType.SPOT, CandleType.FUTURES) and
-                    not pairdf.empty
-                    and 'close' in pairdf.columns and 'open' in pairdf.columns):
+            if (
+                candle_type in (CandleType.SPOT, CandleType.FUTURES)
+                and 'close' in pairdf.columns
+                and 'open' in pairdf.columns
+            ):
                 # Detect gaps between prior close and open
                 gaps = ((pairdf['open'] - pairdf['close'].shift(1)) / pairdf['close'].shift(1))
                 gaps = gaps.dropna()
@@ -365,14 +366,18 @@ class IDataHandler(ABC):
         :param timerange: Timerange specified for start and end dates
         """
 
-        if timerange.starttype == 'date':
-            if pairdata.iloc[0]['date'] > timerange.startdt:
-                logger.warning(f"{pair}, {candle_type}, {timeframe}, "
-                               f"data starts at {pairdata.iloc[0]['date']:%Y-%m-%d %H:%M:%S}")
-        if timerange.stoptype == 'date':
-            if pairdata.iloc[-1]['date'] < timerange.stopdt:
-                logger.warning(f"{pair}, {candle_type}, {timeframe}, "
-                               f"data ends at {pairdata.iloc[-1]['date']:%Y-%m-%d %H:%M:%S}")
+        if (
+            timerange.starttype == 'date'
+            and pairdata.iloc[0]['date'] > timerange.startdt
+        ):
+            logger.warning(f"{pair}, {candle_type}, {timeframe}, "
+                           f"data starts at {pairdata.iloc[0]['date']:%Y-%m-%d %H:%M:%S}")
+        if (
+            timerange.stoptype == 'date'
+            and pairdata.iloc[-1]['date'] < timerange.stopdt
+        ):
+            logger.warning(f"{pair}, {candle_type}, {timeframe}, "
+                           f"data ends at {pairdata.iloc[-1]['date']:%Y-%m-%d %H:%M:%S}")
 
 
 def get_datahandlerclass(datatype: str) -> Type[IDataHandler]:

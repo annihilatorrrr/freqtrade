@@ -143,12 +143,15 @@ def show_config(rpc: Optional[RPC] = Depends(get_rpc_optional), config=Depends(g
 def force_entry(payload: ForceEnterPayload, rpc: RPC = Depends(get_rpc)):
     ordertype = payload.ordertype.value if payload.ordertype else None
 
-    trade = rpc._rpc_force_entry(payload.pair, payload.price, order_side=payload.side,
-                                 order_type=ordertype, stake_amount=payload.stakeamount,
-                                 enter_tag=payload.entry_tag or 'force_entry',
-                                 leverage=payload.leverage)
-
-    if trade:
+    if trade := rpc._rpc_force_entry(
+        payload.pair,
+        payload.price,
+        order_side=payload.side,
+        order_type=ordertype,
+        stake_amount=payload.stakeamount,
+        enter_tag=payload.entry_tag or 'force_entry',
+        leverage=payload.leverage,
+    ):
         return ForceEnterResponse.parse_obj(trade.to_json())
     else:
         return ForceEnterResponse.parse_obj(
@@ -298,14 +301,12 @@ def list_available_pairs(timeframe: Optional[str] = None, stake_currency: Option
 
     pair_interval = sorted(pair_interval, key=lambda x: x[0])
 
-    pairs = list({x[0] for x in pair_interval})
-    pairs.sort()
-    result = {
+    pairs = sorted({x[0] for x in pair_interval})
+    return {
         'length': len(pairs),
         'pairs': pairs,
         'pair_interval': pair_interval,
     }
-    return result
 
 
 @router.get('/sysinfo', response_model=SysInfo, tags=['info'])

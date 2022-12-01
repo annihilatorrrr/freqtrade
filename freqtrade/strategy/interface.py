@@ -618,17 +618,19 @@ class IStrategy(ABC, HyperStrategyMixin):
         """
         Create informative-pairs needed for FreqAI
         """
-        if self.config.get('freqai', {}).get('enabled', False):
-            whitelist_pairs = self.dp.current_whitelist()
-            candle_type = self.config.get('candle_type_def', CandleType.SPOT)
-            corr_pairs = self.config["freqai"]["feature_parameters"]["include_corr_pairlist"]
-            informative_pairs = []
-            for tf in self.config["freqai"]["feature_parameters"]["include_timeframes"]:
-                for pair in set(whitelist_pairs + corr_pairs):
-                    informative_pairs.append((pair, tf, candle_type))
-            return informative_pairs
+        if not self.config.get('freqai', {}).get('enabled', False):
+            return []
+        whitelist_pairs = self.dp.current_whitelist()
+        candle_type = self.config.get('candle_type_def', CandleType.SPOT)
+        corr_pairs = self.config["freqai"]["feature_parameters"]["include_corr_pairlist"]
+        informative_pairs = []
+        for tf in self.config["freqai"]["feature_parameters"]["include_timeframes"]:
+            informative_pairs.extend(
+                (pair, tf, candle_type)
+                for pair in set(whitelist_pairs + corr_pairs)
+            )
 
-        return []
+        return informative_pairs
 
     def gather_informative_pairs(self) -> ListPairsWithTimeframes:
         """
@@ -642,8 +644,10 @@ class IStrategy(ABC, HyperStrategyMixin):
             for p in informative_pairs]
         for inf_data, _ in self._ft_informative:
             # Get default candle type if not provided explicitly.
-            candle_type = (inf_data.candle_type if inf_data.candle_type
-                           else self.config.get('candle_type_def', CandleType.SPOT))
+            candle_type = inf_data.candle_type or self.config.get(
+                'candle_type_def', CandleType.SPOT
+            )
+
             if inf_data.asset:
                 pair_tf = (
                     _format_pair_name(self.config, inf_data.asset),
@@ -652,8 +656,11 @@ class IStrategy(ABC, HyperStrategyMixin):
                 )
                 informative_pairs.append(pair_tf)
             else:
-                for pair in self.dp.current_whitelist():
-                    informative_pairs.append((pair, inf_data.timeframe, candle_type))
+                informative_pairs.extend(
+                    (pair, inf_data.timeframe, candle_type)
+                    for pair in self.dp.current_whitelist()
+                )
+
         informative_pairs.extend(self.__informative_pairs_freqai())
         return list(set(informative_pairs))
 
@@ -710,9 +717,8 @@ class IStrategy(ABC, HyperStrategyMixin):
         if not candle_date:
             # Simple call ...
             return PairLocks.is_pair_locked(pair, side=side)
-        else:
-            lock_time = timeframe_to_next_date(self.timeframe, candle_date)
-            return PairLocks.is_pair_locked(pair, lock_time, side=side)
+        lock_time = timeframe_to_next_date(self.timeframe, candle_date)
+        return PairLocks.is_pair_locked(pair, lock_time, side=side)
 
     def analyze_ticker(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         """
@@ -991,9 +997,12 @@ class IStrategy(ABC, HyperStrategyMixin):
         current_profit = trade.calc_profit_ratio(current_rate)
 
         # if enter signal and ignore_roi is set, we don't need to evaluate min_roi.
-        roi_reached = (not (enter and self.ignore_roi_if_entry_signal)
-                       and self.min_roi_reached(trade=trade, current_profit=current_profit,
-                                                current_time=current_time))
+        roi_reached = (
+            not enter or not self.ignore_roi_if_entry_signal
+        ) and self.min_roi_reached(
+            trade=trade, current_profit=current_profit, current_time=current_time
+        )
+
 
         exit_signal = ExitType.NONE
         custom_reason = ''
@@ -1004,21 +1013,25 @@ class IStrategy(ABC, HyperStrategyMixin):
         if self.use_exit_signal:
             if exit_ and not enter:
                 exit_signal = ExitType.EXIT_SIGNAL
-            else:
-                reason_cust = strategy_safe_wrapper(self.custom_exit, default_retval=False)(
-                    pair=trade.pair, trade=trade, current_time=current_time,
-                    current_rate=current_rate, current_profit=current_profit)
-                if reason_cust:
-                    exit_signal = ExitType.CUSTOM_EXIT
-                    if isinstance(reason_cust, str):
-                        custom_reason = reason_cust
-                        if len(reason_cust) > CUSTOM_EXIT_MAX_LENGTH:
-                            logger.warning(f'Custom exit reason returned from '
-                                           f'custom_exit is too long and was trimmed'
-                                           f'to {CUSTOM_EXIT_MAX_LENGTH} characters.')
-                            custom_reason = reason_cust[:CUSTOM_EXIT_MAX_LENGTH]
-                    else:
-                        custom_reason = ''
+            elif reason_cust := strategy_safe_wrapper(
+                self.custom_exit, default_retval=False
+            )(
+                pair=trade.pair,
+                trade=trade,
+                current_time=current_time,
+                current_rate=current_rate,
+                current_profit=current_profit,
+            ):
+                exit_signal = ExitType.CUSTOM_EXIT
+                if isinstance(reason_cust, str):
+                    custom_reason = reason_cust
+                    if len(reason_cust) > CUSTOM_EXIT_MAX_LENGTH:
+                        logger.warning(f'Custom exit reason returned from '
+                                       f'custom_exit is too long and was trimmed'
+                                       f'to {CUSTOM_EXIT_MAX_LENGTH} characters.')
+                        custom_reason = reason_cust[:CUSTOM_EXIT_MAX_LENGTH]
+                else:
+                    custom_reason = ''
             if (
                 exit_signal == ExitType.CUSTOM_EXIT
                 or (exit_signal == ExitType.EXIT_SIGNAL
@@ -1062,19 +1075,21 @@ class IStrategy(ABC, HyperStrategyMixin):
         :param low: Low value of this candle, only set in backtesting
         :param high: High value of this candle, only set in backtesting
         """
-        stop_loss_value = force_stoploss if force_stoploss else self.stoploss
+        stop_loss_value = force_stoploss or self.stoploss
 
         # Initiate stoploss with open_rate. Does nothing if stoploss is already set.
         trade.adjust_stop_loss(trade.open_rate, stop_loss_value, initial=True)
 
-        dir_correct = (trade.stop_loss < (low or current_rate)
-                       if not trade.is_short else
-                       trade.stop_loss > (high or current_rate)
-                       )
+        dir_correct = (
+            trade.stop_loss > (high or current_rate)
+            if trade.is_short
+            else trade.stop_loss < (low or current_rate)
+        )
+
 
         # Make sure current_profit is calculated using high for backtesting.
         bound = (low if trade.is_short else high)
-        bound_profit = current_profit if not bound else trade.calc_profit_ratio(bound)
+        bound_profit = trade.calc_profit_ratio(bound) if bound else current_profit
         if self.use_custom_stoploss and dir_correct:
             stop_loss_value = strategy_safe_wrapper(self.custom_stoploss, default_retval=None
                                                     )(pair=trade.pair, trade=trade,
@@ -1094,7 +1109,10 @@ class IStrategy(ABC, HyperStrategyMixin):
             # Make sure current_profit is calculated using high for backtesting.
 
             # Don't update stoploss if trailing_only_offset_is_reached is true.
-            if not (self.trailing_only_offset_is_reached and bound_profit < sl_offset):
+            if (
+                not self.trailing_only_offset_is_reached
+                or bound_profit >= sl_offset
+            ):
                 # Specific handling for trailing_stop_positive
                 if self.trailing_stop_positive is not None and bound_profit > sl_offset:
                     stop_loss_value = self.trailing_stop_positive
@@ -1161,10 +1179,7 @@ class IStrategy(ABC, HyperStrategyMixin):
         # Check if time matches and current rate is above threshold
         trade_dur = int((current_time.timestamp() - trade.open_date_utc.timestamp()) // 60)
         _, roi = self.min_roi_reached_entry(trade_dur)
-        if roi is None:
-            return False
-        else:
-            return current_profit > roi
+        return False if roi is None else current_profit > roi
 
     def ft_check_timed_out(self, trade: Trade, order: Order,
                            current_time: datetime) -> bool:

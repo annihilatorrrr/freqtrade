@@ -22,7 +22,7 @@ from tests.exchange.test_exchange import ccxt_exceptionhandlers
 ])
 def test_stoploss_order_binance(default_conf, mocker, limitratio, expected, side, trademode):
     api_mock = MagicMock()
-    order_id = 'test_prod_buy_{}'.format(randint(0, 10 ** 6))
+    order_id = f'test_prod_buy_{randint(0, 10**6)}'
     order_type = 'stop_loss_limit' if trademode == TradingMode.SPOT else 'limit'
 
     api_mock.create_order = MagicMock(return_value={
@@ -52,7 +52,7 @@ def test_stoploss_order_binance(default_conf, mocker, limitratio, expected, side
     api_mock.create_order.reset_mock()
     order_types = {'stoploss': 'limit'}
     if limitratio is not None:
-        order_types.update({'stoploss_on_exchange_limit_ratio': limitratio})
+        order_types['stoploss_on_exchange_limit_ratio'] = limitratio
 
     order = exchange.stoploss(
         pair='ETH/BTC',

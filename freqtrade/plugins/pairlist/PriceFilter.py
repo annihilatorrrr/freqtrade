@@ -98,13 +98,11 @@ class PriceFilter(IPairList):
                 min_precision = market['precision']['amount']
 
                 min_value = min_amount * price
-                if self._exchange.precisionMode == 4:
-                    # tick size
-                    next_value = (min_amount + min_precision) * price
-                else:
+                if self._exchange.precisionMode != 4:
                     # Decimal places
                     min_precision = pow(0.1, min_precision)
-                    next_value = (min_amount + min_precision) * price
+                # tick size
+                next_value = (min_amount + min_precision) * price
                 diff = next_value - min_value
 
                 if diff > self._max_value:
@@ -114,17 +112,15 @@ class PriceFilter(IPairList):
                     return False
 
         # Perform min_price check.
-        if self._min_price != 0:
-            if price < self._min_price:
-                self.log_once(f"Removed {pair} from whitelist, "
-                              f"because last price < {self._min_price:.8f}", logger.info)
-                return False
+        if self._min_price != 0 and price < self._min_price:
+            self.log_once(f"Removed {pair} from whitelist, "
+                          f"because last price < {self._min_price:.8f}", logger.info)
+            return False
 
         # Perform max_price check.
-        if self._max_price != 0:
-            if price > self._max_price:
-                self.log_once(f"Removed {pair} from whitelist, "
-                              f"because last price > {self._max_price:.8f}", logger.info)
-                return False
+        if self._max_price != 0 and price > self._max_price:
+            self.log_once(f"Removed {pair} from whitelist, "
+                          f"because last price > {self._max_price:.8f}", logger.info)
+            return False
 
         return True

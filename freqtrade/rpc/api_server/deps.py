@@ -10,19 +10,15 @@ from .webserver import ApiServer
 
 
 def get_rpc_optional() -> Optional[RPC]:
-    if ApiServer._has_rpc:
-        return ApiServer._rpc
-    return None
+    return ApiServer._rpc if ApiServer._has_rpc else None
 
 
 def get_rpc() -> Optional[Iterator[RPC]]:
-    _rpc = get_rpc_optional()
-    if _rpc:
-        Trade.rollback()
-        yield _rpc
-        Trade.rollback()
-    else:
+    if not (_rpc := get_rpc_optional()):
         raise RPCException('Bot is not in the correct state')
+    Trade.rollback()
+    yield _rpc
+    Trade.rollback()
 
 
 def get_config() -> Dict[str, Any]:

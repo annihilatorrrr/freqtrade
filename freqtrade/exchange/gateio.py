@@ -45,10 +45,11 @@ class Gateio(Exchange):
 
     def validate_ordertypes(self, order_types: Dict) -> None:
 
-        if self.trading_mode != TradingMode.FUTURES:
-            if any(v == 'market' for k, v in order_types.items()):
-                raise OperationalException(
-                    f'Exchange {self.name} does not support market orders.')
+        if self.trading_mode != TradingMode.FUTURES and any(
+            v == 'market' for k, v in order_types.items()
+        ):
+            raise OperationalException(
+                f'Exchange {self.name} does not support market orders.')
 
     def _get_params(
             self,
@@ -76,14 +77,7 @@ class Gateio(Exchange):
         trades = super().get_trades_for_order(order_id, pair, since, params)
 
         if self.trading_mode == TradingMode.FUTURES:
-            # Futures usually don't contain fees in the response.
-            # As such, futures orders on gateio will not contain a fee, which causes
-            # a repeated "update fee" cycle and wrong calculations.
-            # Therefore we patch the response with fees if it's not available.
-            # An alternative also contianing fees would be
-            # privateFuturesGetSettleAccountBook({"settle": "usdt"})
-            pair_fees = self._trading_fees.get(pair, {})
-            if pair_fees:
+            if pair_fees := self._trading_fees.get(pair, {}):
                 for idx, trade in enumerate(trades):
                     fee = trade.get('fee', {})
                     if fee and fee.get('cost') is None:
@@ -107,17 +101,17 @@ class Gateio(Exchange):
             pair=pair,
             params={'stop': True}
         )
-        if self.trading_mode == TradingMode.FUTURES:
-            if order['status'] == 'closed':
-                # Places a real order - which we need to fetch explicitly.
-                new_orderid = order.get('info', {}).get('trade_id')
-                if new_orderid:
-                    order1 = self.fetch_order(order_id=new_orderid, pair=pair, params=params)
-                    order1['id_stop'] = order1['id']
-                    order1['id'] = order_id
-                    order1['stopPrice'] = order.get('stopPrice')
+        if (
+            self.trading_mode == TradingMode.FUTURES
+            and order['status'] == 'closed'
+        ):
+            if new_orderid := order.get('info', {}).get('trade_id'):
+                order1 = self.fetch_order(order_id=new_orderid, pair=pair, params=params)
+                order1['id_stop'] = order1['id']
+                order1['id'] = order_id
+                order1['stopPrice'] = order.get('stopPrice')
 
-                    return order1
+                return order1
         return order
 
     def cancel_stoploss_order(self, order_id: str, pair: str, params: Dict = {}) -> Dict:

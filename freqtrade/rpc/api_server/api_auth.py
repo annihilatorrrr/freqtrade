@@ -56,7 +56,7 @@ async def validate_ws_token(
     ws_token: Union[str, None] = Query(default=None, alias="token"),
     api_config: Dict[str, Any] = Depends(get_api_config)
 ):
-    secret_ws_token = api_config.get('ws_token', None)
+    secret_ws_token = api_config.get('ws_token')
     secret_jwt_key = api_config.get('jwt_secret_key', 'super-secret')
 
     # Check if ws_token is/in secret_ws_token
@@ -65,19 +65,18 @@ async def validate_ws_token(
         if isinstance(secret_ws_token, str):
             is_valid_ws_token = secrets.compare_digest(secret_ws_token, ws_token)
         elif isinstance(secret_ws_token, list):
-            is_valid_ws_token = any([
+            is_valid_ws_token = any(
                 secrets.compare_digest(potential, ws_token)
                 for potential in secret_ws_token
-            ])
+            )
+
 
         if is_valid_ws_token:
             return ws_token
 
     # Check if ws_token is a JWT
     try:
-        user = get_user_from_token(ws_token, secret_jwt_key)
-        return user
-    # If the token is a jwt, and it's valid return the user
+        return get_user_from_token(ws_token, secret_jwt_key)
     except HTTPException:
         pass
 
@@ -93,13 +92,13 @@ def create_token(data: dict, secret_key: str, token_type: str = "access") -> str
         expire = datetime.utcnow() + timedelta(days=30)
     else:
         raise ValueError()
-    to_encode.update({
+    to_encode |= {
         "exp": expire,
         "iat": datetime.utcnow(),
         "type": token_type,
-    })
-    encoded_jwt = jwt.encode(to_encode, secret_key, algorithm=ALGORITHM)
-    return encoded_jwt
+    }
+
+    return jwt.encode(to_encode, secret_key, algorithm=ALGORITHM)
 
 
 def http_basic_or_jwt_token(form_data: HTTPBasicCredentials = Depends(httpbasic),

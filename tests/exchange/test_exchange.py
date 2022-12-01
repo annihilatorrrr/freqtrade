@@ -719,7 +719,7 @@ def test_validate_stakecurrency_error(default_conf, mocker, caplog):
 def test_get_quote_currencies(default_conf, mocker):
     ex = get_patched_exchange(mocker, default_conf)
 
-    assert set(ex.get_quote_currencies()) == set(['USD', 'ETH', 'BTC', 'USDT', 'BUSD'])
+    assert set(ex.get_quote_currencies()) == {'USD', 'ETH', 'BTC', 'USDT', 'BUSD'}
 
 
 @pytest.mark.parametrize('pair,expected', [
@@ -993,20 +993,20 @@ def test_validate_pricing(default_conf, mocker):
     mocker.patch('freqtrade.exchange.Exchange.validate_stakecurrency')
     mocker.patch('freqtrade.exchange.Exchange.name', 'Binance')
     ExchangeResolver.load_exchange('binance', default_conf)
-    has.update({'fetchTicker': False})
+    has['fetchTicker'] = False
     with pytest.raises(OperationalException, match="Ticker pricing not available for .*"):
         ExchangeResolver.load_exchange('binance', default_conf)
 
-    has.update({'fetchTicker': True})
+    has['fetchTicker'] = True
 
     default_conf['exit_pricing']['use_order_book'] = True
     ExchangeResolver.load_exchange('binance', default_conf)
-    has.update({'fetchL2OrderBook': False})
+    has['fetchL2OrderBook'] = False
 
     with pytest.raises(OperationalException, match="Orderbook not available for .*"):
         ExchangeResolver.load_exchange('binance', default_conf)
 
-    has.update({'fetchL2OrderBook': True})
+    has['fetchL2OrderBook'] = True
 
     # Binance has no tickers on futures
     default_conf['trading_mode'] = TradingMode.FUTURES
@@ -1241,14 +1241,14 @@ def test_create_dry_run_order_limit_fill(default_conf, mocker, side, price, fill
     assert order["type"] == "limit"
     assert order["symbol"] == "LTC/USDT"
     assert order["average"] == price
-    assert order['status'] == 'open' if not filled else 'closed'
+    assert 'closed' if filled else order['status'] == 'open'
     order_book_l2_usd.reset_mock()
 
     # fetch order again...
     order_closed = exchange.fetch_dry_run_order(order['id'])
-    assert order_book_l2_usd.call_count == (1 if not filled else 0)
-    assert order_closed['status'] == ('open' if not filled else 'closed')
-    assert order_closed['filled'] == (0 if not filled else 1)
+    assert order_book_l2_usd.call_count == (0 if filled else 1)
+    assert order_closed['status'] == ('closed' if filled else 'open')
+    assert order_closed['filled'] == (1 if filled else 0)
 
     order_book_l2_usd.reset_mock()
 
@@ -1310,8 +1310,11 @@ def test_create_dry_run_order_market_fill(default_conf, mocker, side, rate, amou
 @pytest.mark.parametrize("exchange_name", EXCHANGES)
 def test_create_order(default_conf, mocker, side, ordertype, rate, marketprice, exchange_name):
     api_mock = MagicMock()
-    order_id = 'test_prod_{}_{}'.format(side, randint(0, 10 ** 6))
-    api_mock.options = {} if not marketprice else {"createMarketBuyOrderRequiresPrice": True}
+    order_id = f'test_prod_{side}_{randint(0, 10**6)}'
+    api_mock.options = (
+        {"createMarketBuyOrderRequiresPrice": True} if marketprice else {}
+    )
+
     api_mock.create_order = MagicMock(return_value={
         'id': order_id,
         'info': {
@@ -1389,7 +1392,7 @@ def test_buy_dry_run(default_conf, mocker):
 @pytest.mark.parametrize("exchange_name", EXCHANGES)
 def test_buy_prod(default_conf, mocker, exchange_name):
     api_mock = MagicMock()
-    order_id = 'test_prod_buy_{}'.format(randint(0, 10 ** 6))
+    order_id = f'test_prod_buy_{randint(0, 10**6)}'
     order_type = 'market'
     time_in_force = 'gtc'
     api_mock.options = {}
@@ -1475,7 +1478,7 @@ def test_buy_prod(default_conf, mocker, exchange_name):
 @pytest.mark.parametrize("exchange_name", EXCHANGES)
 def test_buy_considers_time_in_force(default_conf, mocker, exchange_name):
     api_mock = MagicMock()
-    order_id = 'test_prod_buy_{}'.format(randint(0, 10 ** 6))
+    order_id = f'test_prod_buy_{randint(0, 10**6)}'
     api_mock.options = {}
     api_mock.create_order = MagicMock(return_value={
         'id': order_id,
@@ -1539,7 +1542,7 @@ def test_sell_dry_run(default_conf, mocker):
 @pytest.mark.parametrize("exchange_name", EXCHANGES)
 def test_sell_prod(default_conf, mocker, exchange_name):
     api_mock = MagicMock()
-    order_id = 'test_prod_sell_{}'.format(randint(0, 10 ** 6))
+    order_id = f'test_prod_sell_{randint(0, 10**6)}'
     order_type = 'market'
     api_mock.options = {}
     api_mock.create_order = MagicMock(return_value={
@@ -1614,7 +1617,7 @@ def test_sell_prod(default_conf, mocker, exchange_name):
 @pytest.mark.parametrize("exchange_name", EXCHANGES)
 def test_sell_considers_time_in_force(default_conf, mocker, exchange_name):
     api_mock = MagicMock()
-    order_id = 'test_prod_sell_{}'.format(randint(0, 10 ** 6))
+    order_id = f'test_prod_sell_{randint(0, 10**6)}'
     api_mock.create_order = MagicMock(return_value={
         'id': order_id,
         'symbol': 'ETH/BTC',
@@ -2970,10 +2973,7 @@ async def test__async_get_trade_history_time_empty(default_conf, mocker, caplog,
     caplog.set_level(logging.DEBUG)
 
     async def mock_get_trade_hist(pair, *args, **kwargs):
-        if kwargs['since'] == trades_history[0][0]:
-            return trades_history[:-1]
-        else:
-            return []
+        return trades_history[:-1] if kwargs['since'] == trades_history[0][0] else []
 
     caplog.set_level(logging.DEBUG)
     exchange = get_patched_exchange(mocker, default_conf, id=exchange_name)
@@ -5039,7 +5039,7 @@ def test__get_params(mocker, default_conf, exchange_name):
     if exchange_name == 'kraken':
         params2['leverage'] = 3.0
 
-    if exchange_name == 'okx':
+    elif exchange_name == 'okx':
         params2['tdMode'] = 'isolated'
         params2['posSide'] = 'net'
 
@@ -5298,7 +5298,7 @@ def test_get_liquidation_price(
 ])
 def test_stoploss_contract_size(mocker, default_conf, contract_size, order_amount):
     api_mock = MagicMock()
-    order_id = 'test_prod_buy_{}'.format(randint(0, 10 ** 6))
+    order_id = f'test_prod_buy_{randint(0, 10**6)}'
 
     api_mock.create_order = MagicMock(return_value={
         'id': order_id,

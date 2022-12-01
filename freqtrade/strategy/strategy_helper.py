@@ -109,7 +109,7 @@ def stoploss_from_open(
     if (current_profit == -1 and not is_short) or (is_short and current_profit == 1):
         return 1
 
-    if is_short is True:
+    if is_short:
         stoploss = -1 + ((1 - open_relative_stop) / (1 - current_profit))
     else:
         stoploss = 1 - ((1 + open_relative_stop) / (1 + current_profit))

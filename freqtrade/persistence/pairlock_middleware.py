@@ -72,13 +72,14 @@ class PairLocks():
         if PairLocks.use_db:
             return PairLock.query_pair_locks(pair, now, side).all()
         else:
-            locks = [lock for lock in PairLocks.locks if (
-                lock.lock_end_time >= now
+            return [
+                lock
+                for lock in PairLocks.locks
+                if lock.lock_end_time >= now
                 and lock.active is True
-                and (pair is None or lock.pair == pair)
-                and (lock.side == '*' or lock.side == side)
-            )]
-            return locks
+                and ((pair is None or lock.pair == pair))
+                and lock.side in ['*', side]
+            ]
 
     @staticmethod
     def get_pair_longest_lock(
@@ -169,7 +170,4 @@ class PairLocks():
         """
         Return all locks, also locks with expired end date
         """
-        if PairLocks.use_db:
-            return PairLock.query.all()
-        else:
-            return PairLocks.locks
+        return PairLock.query.all() if PairLocks.use_db else PairLocks.locks

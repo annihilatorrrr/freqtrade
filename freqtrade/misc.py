@@ -181,10 +181,7 @@ def safe_value_fallback(obj: dict, key1: str, key2: str, default_value=None):
     """
     if key1 in obj and obj[key1] is not None:
         return obj[key1]
-    else:
-        if key2 in obj and obj[key2] is not None:
-            return obj[key2]
-    return default_value
+    return obj[key2] if key2 in obj and obj[key2] is not None else default_value
 
 
 dictMap = Union[Dict[str, Any], Mapping[str, Any]]
@@ -199,14 +196,13 @@ def safe_value_fallback2(dict1: dictMap, dict2: dictMap, key1: str, key2: str, d
     """
     if key1 in dict1 and dict1[key1] is not None:
         return dict1[key1]
-    else:
-        if key2 in dict2 and dict2[key2] is not None:
-            return dict2[key2]
+    if key2 in dict2 and dict2[key2] is not None:
+        return dict2[key2]
     return default_value
 
 
 def plural(num: float, singular: str, plural: str = None) -> str:
-    return singular if (num == 1 or num == -1) else plural or singular + 's'
+    return singular if num in {1, -1} else plural or f'{singular}s'
 
 
 def render_template(templatefile: str, arguments: dict = {}) -> str:

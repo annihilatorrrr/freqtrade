@@ -134,9 +134,7 @@ class Telegram(RPCHandler):
         # Create keys for generation
         valid_keys_print = [k.replace('$', '') for k in valid_keys]
 
-        # custom keyboard specified in config.json
-        cust_keyboard = self._config['telegram'].get('keyboard', [])
-        if cust_keyboard:
+        if cust_keyboard := self._config['telegram'].get('keyboard', []):
             combined = "(" + ")|(".join(valid_keys) + ")"
             # check for valid shortcuts
             invalid_keys = [b for b in chain.from_iterable(cust_keyboard)
@@ -250,16 +248,15 @@ class Telegram(RPCHandler):
     def _add_analyzed_candle(self, pair: str) -> str:
         candle_val = self._config['telegram'].get(
             'notification_settings', {}).get('show_candle', 'off')
-        if candle_val != 'off':
-            if candle_val == 'ohlc':
-                analyzed_df, _ = self._rpc._freqtrade.dataprovider.get_analyzed_dataframe(
-                    pair, self._config['timeframe'])
-                candle = analyzed_df.iloc[-1].squeeze() if len(analyzed_df) > 0 else None
-                if candle is not None:
-                    return (
-                        f"*Candle OHLC*: `{candle['open']}, {candle['high']}, "
-                        f"{candle['low']}, {candle['close']}`\n"
-                    )
+        if candle_val != 'off' and candle_val == 'ohlc':
+            analyzed_df, _ = self._rpc._freqtrade.dataprovider.get_analyzed_dataframe(
+                pair, self._config['timeframe'])
+            candle = analyzed_df.iloc[-1].squeeze() if len(analyzed_df) > 0 else None
+            if candle is not None:
+                return (
+                    f"*Candle OHLC*: `{candle['open']}, {candle['high']}, "
+                    f"{candle['low']}, {candle['close']}`\n"
+                )
 
         return ''
 
@@ -289,7 +286,7 @@ class Telegram(RPCHandler):
             message += f"*Open Rate:* `{msg['open_rate']:.8f}`\n"
         elif msg['type'] in [RPCMessageType.ENTRY]:
             message += f"*Open Rate:* `{msg['open_rate']:.8f}`\n"\
-                       f"*Current Rate:* `{msg['current_rate']:.8f}`\n"
+                           f"*Current Rate:* `{msg['current_rate']:.8f}`\n"
 
         message += f"*Total:* `({round_coin_value(msg['stake_amount'], msg['stake_currency'])}"
 
@@ -306,7 +303,7 @@ class Telegram(RPCHandler):
             microsecond=0) - msg['open_date'].replace(microsecond=0)
         msg['duration_min'] = msg['duration'].total_seconds() / 60
 
-        msg['enter_tag'] = msg['enter_tag'] if "enter_tag" in msg.keys() else None
+        msg['enter_tag'] = msg['enter_tag'] if "enter_tag" in msg else None
         msg['emoji'] = self._get_sell_emoji(msg)
         msg['leverage_text'] = (f"*Leverage:* `{msg['leverage']:.1f}`\n"
                                 if msg.get('leverage') and msg.get('leverage', 1.0) != 1.0
@@ -339,7 +336,7 @@ class Telegram(RPCHandler):
             else:
                 cp_extra = ''
             cp_extra = f"*Cumulative Profit:* (`{msg['cumulative_profit']:.8f} " \
-                       f"{msg['stake_currency']}{cp_extra}`)\n"
+                           f"{msg['stake_currency']}{cp_extra}`)\n"
         message = (
             f"{msg['emoji']} *{self._exchange_from_msg(msg)}:* "
             f"{'Exited' if is_fill else 'Exiting'} {msg['pair']} (#{msg['trade_id']})\n"
@@ -428,7 +425,7 @@ class Telegram(RPCHandler):
         noti = ''
         if msg_type == RPCMessageType.EXIT:
             sell_noti = self._config['telegram'] \
-                .get('notification_settings', {}).get(str(msg_type), {})
+                    .get('notification_settings', {}).get(str(msg_type), {})
             # For backward compatibility sell still can be string
             if isinstance(sell_noti, str):
                 noti = sell_noti
@@ -436,15 +433,14 @@ class Telegram(RPCHandler):
                 noti = sell_noti.get(str(msg['exit_reason']), default_noti)
         else:
             noti = self._config['telegram'] \
-                .get('notification_settings', {}).get(str(msg_type), default_noti)
+                    .get('notification_settings', {}).get(str(msg_type), default_noti)
 
         if noti == 'off':
             logger.info(f"Notification '{msg_type}' not sent.")
             # Notification disabled
             return
 
-        message = self.compose_message(deepcopy(msg), msg_type)
-        if message:
+        if message := self.compose_message(deepcopy(msg), msg_type):
             self._send_msg(message, disable_notification=(noti == 'silent'))
 
     def _get_sell_emoji(self, msg):
@@ -480,10 +476,14 @@ class Telegram(RPCHandler):
             cur_entry_average = order["safe_price"]
             lines.append("  ")
             if x == 0:
-                lines.append(f"*{wording} #{x+1}:*")
-                lines.append(
-                    f"*Amount:* {cur_entry_amount} ({order['cost']:.8f} {quote_currency})")
-                lines.append(f"*Average Price:* {cur_entry_average}")
+                lines.extend(
+                    (
+                        f"*{wording} #{x + 1}:*",
+                        f"*Amount:* {cur_entry_amount} ({order['cost']:.8f} {quote_currency})",
+                        f"*Average Price:* {cur_entry_average}",
+                    )
+                )
+
             else:
                 sumA = 0
                 sumB = 0
@@ -491,31 +491,32 @@ class Telegram(RPCHandler):
                     amount = filled_orders[y]["filled"] or filled_orders[y]["amount"]
                     sumA += amount * filled_orders[y]["safe_price"]
                     sumB += amount
-                prev_avg_price = sumA / sumB
                 # TODO: This calculation ignores fees.
                 price_to_1st_entry = ((cur_entry_average - first_avg) / first_avg)
                 minus_on_entry = 0
-                if prev_avg_price:
+                if prev_avg_price := sumA / sumB:
                     minus_on_entry = (cur_entry_average - prev_avg_price) / prev_avg_price
 
                 lines.append(f"*{wording} #{x+1}:* at {minus_on_entry:.2%} avg profit")
                 if is_open:
                     lines.append("({})".format(cur_entry_datetime
                                                .humanize(granularity=["day", "hour", "minute"])))
-                lines.append(
-                    f"*Amount:* {cur_entry_amount} ({order['cost']:.8f} {quote_currency})")
-                lines.append(f"*Average {wording} Price:* {cur_entry_average} "
-                             f"({price_to_1st_entry:.2%} from 1st entry rate)")
-                lines.append(f"*Order filled:* {order['order_filled_date']}")
+                lines.extend(
+                    (
+                        f"*Amount:* {cur_entry_amount} ({order['cost']:.8f} {quote_currency})",
+                        f"*Average {wording} Price:* {cur_entry_average} ({price_to_1st_entry:.2%} from 1st entry rate)",
+                        f"*Order filled:* {order['order_filled_date']}",
+                    )
+                )
 
-                # TODO: is this really useful?
-                # dur_entry = cur_entry_datetime - arrow.get(
-                #     filled_orders[x - 1]["order_filled_date"])
-                # days = dur_entry.days
-                # hours, remainder = divmod(dur_entry.seconds, 3600)
-                # minutes, seconds = divmod(remainder, 60)
-                # lines.append(
-                # f"({days}d {hours}h {minutes}m {seconds}s from previous {wording.lower()})")
+                        # TODO: is this really useful?
+                        # dur_entry = cur_entry_datetime - arrow.get(
+                        #     filled_orders[x - 1]["order_filled_date"])
+                        # days = dur_entry.days
+                        # hours, remainder = divmod(dur_entry.seconds, 3600)
+                        # minutes, seconds = divmod(remainder, 60)
+                        # lines.append(
+                        # f"({days}d {hours}h {minutes}m {seconds}s from previous {wording.lower()})")
             lines_detail.append("\n".join(lines))
         return lines_detail
 
@@ -587,11 +588,19 @@ class Telegram(RPCHandler):
                     lines.append("*Initial Stoploss:* `{initial_stop_loss_abs:.8f}` "
                                  "`({initial_stop_loss_ratio:.2%})`")
 
-                # Adding stoploss and stoploss percentage only if it is not None
-                lines.append("*Stoploss:* `{stop_loss_abs:.8f}` " +
-                             ("`({stop_loss_ratio:.2%})`" if r['stop_loss_ratio'] else ""))
-                lines.append("*Stoploss distance:* `{stoploss_current_dist:.8f}` "
-                             "`({stoploss_current_dist_ratio:.2%})`")
+                lines.extend(
+                    (
+                        "*Stoploss:* `{stop_loss_abs:.8f}` "
+                        + (
+                            "`({stop_loss_ratio:.2%})`"
+                            if r['stop_loss_ratio']
+                            else ""
+                        ),
+                        "*Stoploss distance:* `{stoploss_current_dist:.8f}` "
+                        "`({stoploss_current_dist_ratio:.2%})`",
+                    )
+                )
+
                 if r['open_order']:
                     lines.append(
                         "*Open Order:* `{open_order}`"
@@ -599,7 +608,7 @@ class Telegram(RPCHandler):
 
             lines_detail = self._prepare_order_details(
                 r['orders'], r['quote_currency'], r['is_open'])
-            lines.extend(lines_detail if lines_detail else "")
+            lines.extend(lines_detail or "")
             self.__send_status_msg(lines, r)
 
     def __send_status_msg(self, lines: List[str], r: Dict[str, Any]) -> None:
@@ -639,7 +648,7 @@ class Telegram(RPCHandler):
         As an example with 50 trades, there will be int(50/50 + 0.99) = 1 message
         """
         messages_count = max(int(len(statlist) / max_trades_per_msg + 0.99), 1)
-        for i in range(0, messages_count):
+        for i in range(messages_count):
             trades = statlist[i * max_trades_per_msg:(i + 1) * max_trades_per_msg]
             if show_total and i == messages_count - 1:
                 # append total line
@@ -780,7 +789,7 @@ class Telegram(RPCHandler):
         avg_duration = stats['avg_duration']
         best_pair = stats['best_pair']
         best_pair_profit_ratio = stats['best_pair_profit_ratio']
-        if stats['trade_count'] == 0:
+        if trade_count == 0:
             markdown_msg = 'No trades yet.'
         else:
             # Message to display
@@ -793,18 +802,8 @@ class Telegram(RPCHandler):
             else:
                 markdown_msg = "`No closed trade` \n"
 
-            markdown_msg += (
-                f"*ROI:* All trades\n"
-                f"∙ `{round_coin_value(profit_all_coin, stake_cur)} "
-                f"({profit_all_ratio_mean:.2%}) "
-                f"({profit_all_percent} \N{GREEK CAPITAL LETTER SIGMA}%)`\n"
-                f"∙ `{round_coin_value(profit_all_fiat, fiat_disp_cur)}`\n"
-                f"*Total Trade Count:* `{trade_count}`\n"
-                f"*{'First Trade opened' if not timescale else 'Showing Profit since'}:* "
-                f"`{first_trade_date}`\n"
-                f"*Latest Trade opened:* `{latest_trade_date}`\n"
-                f"*Win / Loss:* `{stats['winning_trades']} / {stats['losing_trades']}`"
-            )
+            markdown_msg += f"*ROI:* All trades\n∙ `{round_coin_value(profit_all_coin, stake_cur)} ({profit_all_ratio_mean:.2%}) ({profit_all_percent} \N{GREEK CAPITAL LETTER SIGMA}%)`\n∙ `{round_coin_value(profit_all_fiat, fiat_disp_cur)}`\n*Total Trade Count:* `{trade_count}`\n*{'Showing Profit since' if timescale else 'First Trade opened'}:* `{first_trade_date}`\n*Latest Trade opened:* `{latest_trade_date}`\n*Win / Loss:* `{stats['winning_trades']} / {stats['losing_trades']}`"
+
             if stats['closed_trade_count'] > 0:
                 markdown_msg += (
                     f"\n*Avg. Duration:* `{avg_duration}`\n"
@@ -908,7 +907,7 @@ class Telegram(RPCHandler):
                         f"\t`Pending: {curr['used']:.8f}`\n"
                         f"\t`Est. {curr['stake']}: "
                         f"{round_coin_value(curr['est_stake'], curr['stake'], False)}`\n")
-            elif curr['est_stake'] <= balance_dust_level:
+            else:
                 total_dust_balance += curr['est_stake']
                 total_dust_currencies += 1
 
@@ -1009,9 +1008,10 @@ class Telegram(RPCHandler):
             except RPCException:
                 self._send_msg(msg='No open trade found.')
                 return
-            trades = []
-            for trade in statlist:
-                trades.append((trade[0], f"{trade[0]} {trade[1]} {trade[2]} {trade[3]}"))
+            trades = [
+                (trade[0], f"{trade[0]} {trade[1]} {trade[2]} {trade[3]}")
+                for trade in statlist
+            ]
 
             trade_buttons = [
                 InlineKeyboardButton(text=trade[1], callback_data=f"force_exit__{trade[0]}")
@@ -1286,7 +1286,7 @@ class Telegram(RPCHandler):
         message = tabulate({k: [v] for k, v in counts.items()},
                            headers=['current', 'max', 'total stake'],
                            tablefmt='simple')
-        message = "<pre>{}</pre>".format(message)
+        message = f"<pre>{message}</pre>"
         logger.debug(message)
         self._send_msg(message, parse_mode=ParseMode.HTML,
                        reload_able=True, callback_path="update_count",
@@ -1361,10 +1361,10 @@ class Telegram(RPCHandler):
         self.send_blacklist_msg(self._rpc._rpc_blacklist(context.args))
 
     def send_blacklist_msg(self, blacklist: Dict):
-        errmsgs = []
-        for pair, error in blacklist['errors'].items():
-            errmsgs.append(f"Error adding `{pair}` to blacklist: `{error['error_msg']}`")
-        if errmsgs:
+        if errmsgs := [
+            f"Error adding `{pair}` to blacklist: `{error['error_msg']}`"
+            for pair, error in blacklist['errors'].items()
+        ]:
             self._send_msg('\n'.join(errmsgs))
 
         message = f"Blacklist contains {blacklist['length']} pairs\n"
@@ -1581,7 +1581,7 @@ class Telegram(RPCHandler):
             ])
         else:
             reply_markup = InlineKeyboardMarkup([[]])
-        msg += "\nUpdated: {}".format(datetime.now().ctime())
+        msg += f"\nUpdated: {datetime.now().ctime()}"
         if not query.message:
             return
         chat_id = query.message.chat_id
@@ -1596,9 +1596,7 @@ class Telegram(RPCHandler):
                 reply_markup=reply_markup
             )
         except BadRequest as e:
-            if 'not modified' in e.message.lower():
-                pass
-            else:
+            if 'not modified' not in e.message.lower():
                 logger.warning('TelegramError: %s', e.message)
         except TelegramError as telegram_err:
             logger.warning('TelegramError: %s! Giving up on that message.', telegram_err.message)
@@ -1624,11 +1622,10 @@ class Telegram(RPCHandler):
         if reload_able and self._config['telegram'].get('reload', True):
             reply_markup = InlineKeyboardMarkup([
                 [InlineKeyboardButton("Refresh", callback_data=callback_path)]])
+        elif keyboard is None:
+            reply_markup = ReplyKeyboardMarkup(self._keyboard, resize_keyboard=True)
         else:
-            if keyboard is not None:
-                reply_markup = InlineKeyboardMarkup(keyboard, resize_keyboard=True)
-            else:
-                reply_markup = ReplyKeyboardMarkup(self._keyboard, resize_keyboard=True)
+            reply_markup = InlineKeyboardMarkup(keyboard, resize_keyboard=True)
         try:
             try:
                 self._updater.bot.send_message(

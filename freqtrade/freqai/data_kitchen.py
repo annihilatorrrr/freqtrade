@@ -98,10 +98,12 @@ class FreqaiDataKitchen:
                 )
 
         self.data['extra_returns_per_train'] = self.freqai_config.get('extra_returns_per_train', {})
-        if not self.freqai_config.get("data_kitchen_thread_count", 0):
-            self.thread_count = max(int(psutil.cpu_count() * 2 - 2), 1)
-        else:
-            self.thread_count = self.freqai_config["data_kitchen_thread_count"]
+        self.thread_count = (
+            self.freqai_config["data_kitchen_thread_count"]
+            if self.freqai_config.get("data_kitchen_thread_count", 0)
+            else max(int(psutil.cpu_count() * 2 - 2), 1)
+        )
+
         self.train_dates: DataFrame = pd.DataFrame()
         self.unique_classes: Dict[str, list] = {}
         self.unique_class_list: list = []
@@ -210,9 +212,10 @@ class FreqaiDataKitchen:
 
         drop_index = pd.isnull(filtered_df).any(axis=1)  # get the rows that have NaNs,
         drop_index = drop_index.replace(True, 1).replace(False, 0)  # pep8 requirement.
-        if (training_filter):
-            const_cols = list((filtered_df.nunique() == 1).loc[lambda x: x].index)
-            if const_cols:
+        if training_filter:
+            if const_cols := list(
+                (filtered_df.nunique() == 1).loc[lambda x: x].index
+            ):
                 filtered_df = filtered_df.filter(filtered_df.columns.difference(const_cols))
                 self.data['constant_features_list'] = const_cols
                 logger.warning(f"Removed features {const_cols} with constant values.")
@@ -238,7 +241,7 @@ class FreqaiDataKitchen:
                 f"dropped {len(unfiltered_df) - len(filtered_df)} training points"
                 f" due to NaNs in populated dataset {len(unfiltered_df)}."
             )
-            if (1 - len(filtered_df) / len(unfiltered_df)) > 0.1 and self.live:
+            if len(filtered_df) / len(unfiltered_df) < 1 - 0.1 and self.live:
                 worst_indicator = str(unfiltered_df.count().idxmin())
                 logger.warning(
                     f" {(1 - len(filtered_df)/len(unfiltered_df)) * 100:.0f} percent "
@@ -505,9 +508,10 @@ class FreqaiDataKitchen:
         train_components = pca.transform(self.data_dictionary["train_features"])
         self.data_dictionary["train_features"] = pd.DataFrame(
             data=train_components,
-            columns=["PC" + str(i) for i in range(0, n_keep_components)],
+            columns=[f"PC{str(i)}" for i in range(n_keep_components)],
             index=self.data_dictionary["train_features"].index,
         )
+
         # normalsing transformed training features
         self.data_dictionary["train_features"] = self.normalize_single_dataframe(
             self.data_dictionary["train_features"])
@@ -521,9 +525,10 @@ class FreqaiDataKitchen:
             test_components = pca.transform(self.data_dictionary["test_features"])
             self.data_dictionary["test_features"] = pd.DataFrame(
                 data=test_components,
-                columns=["PC" + str(i) for i in range(0, n_keep_components)],
+                columns=[f"PC{str(i)}" for i in range(n_keep_components)],
                 index=self.data_dictionary["test_features"].index,
             )
+
             # normalise transformed test feature to transformed training features
             self.data_dictionary["test_features"] = self.normalize_data_from_metadata(
                 self.data_dictionary["test_features"])
@@ -546,9 +551,10 @@ class FreqaiDataKitchen:
         pca_components = self.pca.transform(filtered_dataframe)
         self.data_dictionary["prediction_features"] = pd.DataFrame(
             data=pca_components,
-            columns=["PC" + str(i) for i in range(0, self.data["n_kept_components"])],
+            columns=[f"PC{str(i)}" for i in range(self.data["n_kept_components"])],
             index=filtered_dataframe.index,
         )
+
         # normalise transformed predictions to transformed training features
         self.data_dictionary["prediction_features"] = self.normalize_data_from_metadata(
             self.data_dictionary["prediction_features"])
@@ -565,9 +571,7 @@ class FreqaiDataKitchen:
         # remove the diagonal distances which are itself distances ~0
         np.fill_diagonal(pairwise, np.NaN)
         pairwise = pairwise.reshape(-1, 1)
-        avg_mean_dist = pairwise[~np.isnan(pairwise)].mean()
-
-        return avg_mean_dist
+        return pairwise[~np.isnan(pairwise)].mean()
 
     def get_outlier_percentage(self, dropped_pts: npt.NDArray) -> float:
         """
@@ -576,10 +580,7 @@ class FreqaiDataKitchen:
         outlier_protection_pct = self.freqai_config["feature_parameters"].get(
             "outlier_protection_percentage", 30)
         outlier_pct = (dropped_pts.sum() / len(dropped_pts)) * 100
-        if outlier_pct >= outlier_protection_pct:
-            return outlier_pct
-        else:
-            return 0.0
+        return outlier_pct if outlier_pct >= outlier_protection_pct else 0.0
 
     def use_SVM_to_remove_outliers(self, predict: bool) -> None:
         """
@@ -618,9 +619,7 @@ class FreqaiDataKitchen:
             )
             y_pred = self.svm_model.predict(self.data_dictionary["train_features"])
             kept_points = np.where(y_pred == -1, 0, y_pred)
-            # keep_index = np.where(y_pred == 1)
-            outlier_pct = self.get_outlier_percentage(1 - kept_points)
-            if outlier_pct:
+            if outlier_pct := self.get_outlier_percentage(1 - kept_points):
                 logger.warning(
                         f"SVM detected {outlier_pct:.2f}% of the points as outliers. "
                         f"Keeping original dataset."
@@ -897,12 +896,10 @@ class FreqaiDataKitchen:
         features: list = the features to be used for training/prediction
         """
         column_names = dataframe.columns
-        features = [c for c in column_names if "%" in c]
-
-        if not features:
+        if features := [c for c in column_names if "%" in c]:
+            self.training_features_list = features
+        else:
             raise OperationalException("Could not find any features!")
-
-        self.training_features_list = features
 
     def find_labels(self, dataframe: DataFrame) -> None:
         column_names = dataframe.columns
@@ -946,8 +943,7 @@ class FreqaiDataKitchen:
         training than older data.
         """
         wfactor = self.config["freqai"]["feature_parameters"]["weight_factor"]
-        weights = np.exp(-np.arange(num_weights) / (wfactor * num_weights))[::-1]
-        return weights
+        return np.exp(-np.arange(num_weights) / (wfactor * num_weights))[::-1]
 
     def get_predictions_to_append(self, predictions: DataFrame,
                                   do_predict: npt.ArrayLike,
@@ -974,8 +970,7 @@ class FreqaiDataKitchen:
             append_df["DI_values"] = self.DI_values
 
         dataframe_backtest.reset_index(drop=True, inplace=True)
-        merged_df = pd.concat([dataframe_backtest["date"], append_df], axis=1)
-        return merged_df
+        return pd.concat([dataframe_backtest["date"], append_df], axis=1)
 
     def append_predictions(self, append_df: DataFrame) -> None:
         """
@@ -1049,10 +1044,7 @@ class FreqaiDataKitchen:
         time = datetime.now(tz=timezone.utc).timestamp()
         elapsed_time = (time - trained_timestamp) / 3600  # hours
         max_time = self.freqai_config.get("expiration_hours", 0)
-        if max_time > 0:
-            return elapsed_time > max_time
-        else:
-            return False
+        return elapsed_time > max_time if max_time > 0 else False
 
     def check_if_new_training_required(
         self, trained_timestamp: int
@@ -1146,9 +1138,11 @@ class FreqaiDataKitchen:
         for pair in pairs:
             pair = pair.replace(':', '')  # lightgbm doesnt like colons
             valid_strs = [f"%-{pair}", f"%{pair}", f"%_{pair}"]
-            pair_cols = [col for col in dataframe.columns if
-                         any(substr in col for substr in valid_strs)]
-            if pair_cols:
+            if pair_cols := [
+                col
+                for col in dataframe.columns
+                if any(substr in col for substr in valid_strs)
+            ]:
                 pair_cols.insert(0, 'date')
                 corr_dataframes[pair] = dataframe.filter(pair_cols, axis=1)
 
@@ -1308,8 +1302,7 @@ class FreqaiDataKitchen:
         """
         Get prediction dataframe from feather file format
         """
-        append_df = pd.read_feather(self.backtesting_results_path)
-        return append_df
+        return pd.read_feather(self.backtesting_results_path)
 
     def check_if_backtest_prediction_is_valid(
         self,
@@ -1327,9 +1320,7 @@ class FreqaiDataKitchen:
                                       f"{self.model_filename}_prediction.feather")
         self.backtesting_results_path = path_to_predictionfile
 
-        file_exists = path_to_predictionfile.is_file()
-
-        if file_exists:
+        if file_exists := path_to_predictionfile.is_file():
             append_df = self.get_backtesting_prediction()
             if len(append_df) == len_backtest_df and 'date' in append_df:
                 logger.info(f"Found backtesting prediction file at {path_to_predictionfile}")

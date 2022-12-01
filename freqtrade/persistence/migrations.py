@@ -19,7 +19,7 @@ def has_column(columns: List, searchname: str) -> bool:
 
 
 def get_column_def(columns: List, column: str, default: str) -> str:
-    return default if not has_column(columns, column) else column
+    return column if has_column(columns, column) else default
 
 
 def get_backup_name(tabs: List[str], backup_prefix: str):

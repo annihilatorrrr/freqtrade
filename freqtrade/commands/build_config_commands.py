@@ -255,8 +255,7 @@ def start_new_config(args: Dict[str, Any]) -> None:
     config_path = Path(args['config'][0])
     chown_user_directory(config_path.parent)
     if config_path.exists():
-        overwrite = ask_user_overwrite(config_path)
-        if overwrite:
+        if overwrite := ask_user_overwrite(config_path):
             config_path.unlink()
         else:
             raise OperationalException(

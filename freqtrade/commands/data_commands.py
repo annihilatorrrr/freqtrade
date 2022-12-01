@@ -79,13 +79,7 @@ def start_download_data(args: Dict[str, Any]) -> None:
                 data_format_ohlcv=config['dataformat_ohlcv'],
                 data_format_trades=config['dataformat_trades'],
             )
-        else:
-            if not exchange.get_option('ohlcv_has_history', True):
-                raise OperationalException(
-                    f"Historic klines not available for {exchange.name}. "
-                    "Please use `--dl-trades` instead for this exchange "
-                    "(will unfortunately take a long time)."
-                    )
+        elif exchange.get_option('ohlcv_has_history', True):
             pairs_not_available = refresh_backtest_ohlcv_data(
                 exchange, pairs=expanded_pairs, timeframes=config['timeframes'],
                 datadir=config['datadir'], timerange=timerange,
@@ -95,6 +89,12 @@ def start_download_data(args: Dict[str, Any]) -> None:
                 prepend=config.get('prepend_data', False)
             )
 
+        else:
+            raise OperationalException(
+                f"Historic klines not available for {exchange.name}. "
+                "Please use `--dl-trades` instead for this exchange "
+                "(will unfortunately take a long time)."
+                )
     except KeyboardInterrupt:
         sys.exit("SIGINT received, aborting ...")
 

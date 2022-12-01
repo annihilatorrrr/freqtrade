@@ -135,7 +135,7 @@ class FreqaiExampleHybridStrategy(IStrategy):
             if n == 0:
                 continue
             informative_shift = informative[indicators].shift(n)
-            informative_shift = informative_shift.add_suffix("_shift-" + str(n))
+            informative_shift = informative_shift.add_suffix(f"_shift-{str(n)}")
             informative = pd.concat((informative, informative_shift), axis=1)
 
         df = merge_informative_pair(df, informative, self.config["timeframe"], tf, ffill=True)

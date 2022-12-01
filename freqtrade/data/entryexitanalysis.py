@@ -34,9 +34,7 @@ def _load_signal_candles(backtest_dir: Path):
 
 
 def _process_candles_and_indicators(pairlist, strategy_name, trades, signal_candles):
-    analysed_trades_dict = {}
-    analysed_trades_dict[strategy_name] = {}
-
+    analysed_trades_dict = {strategy_name: {}}
     try:
         logger.info(f"Processing {strategy_name} : {len(pairlist)} pairs")
 
@@ -55,34 +53,33 @@ def _process_candles_and_indicators(pairlist, strategy_name, trades, signal_cand
 def _analyze_candles_and_indicators(pair, trades, signal_candles):
     buyf = signal_candles
 
-    if len(buyf) > 0:
-        buyf = buyf.set_index('date', drop=False)
-        trades_red = trades.loc[trades['pair'] == pair].copy()
-
-        trades_inds = pd.DataFrame()
-
-        if trades_red.shape[0] > 0 and buyf.shape[0] > 0:
-            for t, v in trades_red.open_date.items():
-                allinds = buyf.loc[(buyf['date'] < v)]
-                if allinds.shape[0] > 0:
-                    tmp_inds = allinds.iloc[[-1]]
-
-                    trades_red.loc[t, 'signal_date'] = tmp_inds['date'].values[0]
-                    trades_red.loc[t, 'enter_reason'] = trades_red.loc[t, 'enter_tag']
-                    tmp_inds.index.rename('signal_date', inplace=True)
-                    trades_inds = pd.concat([trades_inds, tmp_inds])
-
-            if 'signal_date' in trades_red:
-                trades_red['signal_date'] = pd.to_datetime(trades_red['signal_date'], utc=True)
-                trades_red.set_index('signal_date', inplace=True)
-
-                try:
-                    trades_red = pd.merge(trades_red, trades_inds, on='signal_date', how='outer')
-                except Exception as e:
-                    raise e
-        return trades_red
-    else:
+    if len(buyf) <= 0:
         return pd.DataFrame()
+    buyf = buyf.set_index('date', drop=False)
+    trades_red = trades.loc[trades['pair'] == pair].copy()
+
+    trades_inds = pd.DataFrame()
+
+    if trades_red.shape[0] > 0 and buyf.shape[0] > 0:
+        for t, v in trades_red.open_date.items():
+            allinds = buyf.loc[(buyf['date'] < v)]
+            if allinds.shape[0] > 0:
+                tmp_inds = allinds.iloc[[-1]]
+
+                trades_red.loc[t, 'signal_date'] = tmp_inds['date'].values[0]
+                trades_red.loc[t, 'enter_reason'] = trades_red.loc[t, 'enter_tag']
+                tmp_inds.index.rename('signal_date', inplace=True)
+                trades_inds = pd.concat([trades_inds, tmp_inds])
+
+        if 'signal_date' in trades_red:
+            trades_red['signal_date'] = pd.to_datetime(trades_red['signal_date'], utc=True)
+            trades_red.set_index('signal_date', inplace=True)
+
+            try:
+                trades_red = pd.merge(trades_red, trades_inds, on='signal_date', how='outer')
+            except Exception as e:
+                raise e
+    return trades_red
 
 
 def _do_group_table_output(bigdf, glist):
@@ -119,11 +116,6 @@ def _do_group_table_output(bigdf, glist):
             _print_table(new, sortcols, show_index=True)
 
         else:
-            agg_mask = {'profit_abs': ['count', 'sum', 'median', 'mean'],
-                        'profit_ratio': ['sum', 'median', 'mean']}
-            agg_cols = ['num_buys', 'profit_abs_sum', 'profit_abs_median',
-                        'profit_abs_mean', 'median_profit_pct', 'mean_profit_pct',
-                        'total_profit_pct']
             sortcols = ['profit_abs_sum', 'enter_reason']
 
             # 1: profit summaries grouped by enter_tag
@@ -142,7 +134,12 @@ def _do_group_table_output(bigdf, glist):
             if g == "4":
                 group_mask = ['pair', 'enter_reason', 'exit_reason']
             if group_mask:
+                agg_mask = {'profit_abs': ['count', 'sum', 'median', 'mean'],
+                            'profit_ratio': ['sum', 'median', 'mean']}
                 new = bigdf.groupby(group_mask).agg(agg_mask).reset_index()
+                agg_cols = ['num_buys', 'profit_abs_sum', 'profit_abs_median',
+                            'profit_abs_mean', 'median_profit_pct', 'mean_profit_pct',
+                            'total_profit_pct']
                 new.columns = group_mask + agg_cols
                 new['median_profit_pct'] = new['median_profit_pct'] * 100
                 new['mean_profit_pct'] = new['mean_profit_pct'] * 100
@@ -194,10 +191,7 @@ def print_results(res_df, analysis_groups, indicator_list):
         if "all" in indicator_list:
             print(res_df)
         elif indicator_list is not None:
-            available_inds = []
-            for ind in indicator_list:
-                if ind in res_df:
-                    available_inds.append(ind)
+            available_inds = [ind for ind in indicator_list if ind in res_df]
             ilist = ["pair", "enter_reason", "exit_reason"] + available_inds
             _print_table(res_df[ilist], sortcols=['exit_reason'], show_index=False)
     else:
@@ -205,11 +199,7 @@ def print_results(res_df, analysis_groups, indicator_list):
 
 
 def _print_table(df, sortcols=None, show_index=False):
-    if (sortcols is not None):
-        data = df.sort_values(sortcols)
-    else:
-        data = df
-
+    data = df.sort_values(sortcols) if (sortcols is not None) else df
     print(
         tabulate(
             data,

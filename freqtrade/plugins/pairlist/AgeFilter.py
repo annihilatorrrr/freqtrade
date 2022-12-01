@@ -81,9 +81,7 @@ class AgeFilter(IPairList):
             # Remove pairs that have been removed before
             return [p for p in pairlist if p not in self._symbolsCheckFailed]
 
-        since_days = -(
-            self._max_days_listed if self._max_days_listed else self._min_days_listed
-        ) - 1
+        since_days = (-(self._max_days_listed or self._min_days_listed) - 1)
         since_ms = int(arrow.utcnow()
                        .floor('day')
                        .shift(days=since_days)

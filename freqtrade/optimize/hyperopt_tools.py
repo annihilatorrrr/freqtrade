@@ -28,10 +28,7 @@ NON_OPT_PARAM_APPENDIX = "  # value loaded from strategy"
 def hyperopt_serializer(x):
     if isinstance(x, np.integer):
         return int(x)
-    if isinstance(x, np.bool_):
-        return bool(x)
-
-    return str(x)
+    return bool(x) if isinstance(x, np.bool_) else str(x)
 
 
 class HyperoptStateContainer():
@@ -53,8 +50,7 @@ class HyperoptTools():
         from freqtrade.resolvers.strategy_resolver import StrategyResolver
         strategy_objs = StrategyResolver.search_all_objects(
             config, False, config.get('recursive_strategy_search', False))
-        strategies = [s for s in strategy_objs if s['name'] == strategy_name]
-        if strategies:
+        if strategies := [s for s in strategy_objs if s['name'] == strategy_name]:
             strategy = strategies[0]
 
             return Path(strategy['location'])
@@ -83,9 +79,7 @@ class HyperoptTools():
     @staticmethod
     def try_export_params(config: Config, strategy_name: str, params: Dict):
         if params.get(FTHYPT_FILEVERSION, 1) >= 2 and not config.get('disableparamexport', False):
-            # Export parameters ...
-            fn = HyperoptTools.get_strategy_filename(config, strategy_name)
-            if fn:
+            if fn := HyperoptTools.get_strategy_filename(config, strategy_name):
                 HyperoptTools.export_params(params, strategy_name, fn.with_suffix('.json'))
             else:
                 logger.warning("Strategy not found, not exporting parameter file.")
@@ -96,7 +90,7 @@ class HyperoptTools():
         Tell if the space value is contained in the configuration
         """
         # 'trailing' and 'protection spaces are not included in the 'default' set of spaces
-        if space in ('trailing', 'protection'):
+        if space in {'trailing', 'protection'}:
             return any(s in config['spaces'] for s in [space, 'all'])
         else:
             return any(s in config['spaces'] for s in [space, 'all', 'default'])
@@ -119,16 +113,15 @@ class HyperoptTools():
 
     @staticmethod
     def _test_hyperopt_results_exist(results_file) -> bool:
-        if results_file.is_file() and results_file.stat().st_size > 0:
-            if results_file.suffix == '.pickle':
-                raise OperationalException(
-                    "Legacy hyperopt results are no longer supported."
-                    "Please rerun hyperopt or use an older version to load this file."
-                )
-            return True
-        else:
+        if not results_file.is_file() or results_file.stat().st_size <= 0:
             # No file found.
             return False
+        if results_file.suffix == '.pickle':
+            raise OperationalException(
+                "Legacy hyperopt results are no longer supported."
+                "Please rerun hyperopt or use an older version to load this file."
+            )
+        return True
 
     @staticmethod
     def load_filtered_results(results_file: Path, config: Config) -> Tuple[List, int]:
@@ -213,7 +206,7 @@ class HyperoptTools():
             if len(space_non_optimized) > 0:
                 all_space_params = {**space_params, **space_non_optimized}
 
-            if space in ['buy', 'sell']:
+            if space in {'buy', 'sell'}:
                 result_dict.setdefault('params', {}).update(all_space_params)
             elif space == 'roi':
                 # Convert keys in min_roi dict to strings because
@@ -224,44 +217,44 @@ class HyperoptTools():
 
     @staticmethod
     def _params_pretty_print(params, space: str, header: str, non_optimized={}) -> None:
-        if space in params or space in non_optimized:
-            space_params = HyperoptTools._space_params(params, space, 5)
-            no_params = HyperoptTools._space_params(non_optimized, space, 5)
-            appendix = ''
-            if not space_params and not no_params:
+        if space not in params and space not in non_optimized:
+            return
+        space_params = HyperoptTools._space_params(params, space, 5)
+        no_params = HyperoptTools._space_params(non_optimized, space, 5)
+        appendix = ''
+        if not space_params:
+            if not no_params:
                 # No parameters - don't print
                 return
-            if not space_params:
-                # Not optimized parameters - append string
-                appendix = NON_OPT_PARAM_APPENDIX
+            # Not optimized parameters - append string
+            appendix = NON_OPT_PARAM_APPENDIX
 
-            result = f"\n# {header}\n"
-            if space == "stoploss":
-                stoploss = safe_value_fallback2(space_params, no_params, space, space)
-                result += (f"stoploss = {stoploss}{appendix}")
+        result = f"\n# {header}\n"
+        if space == "stoploss":
+            stoploss = safe_value_fallback2(space_params, no_params, space, space)
+            result += (f"stoploss = {stoploss}{appendix}")
 
-            elif space == "roi":
-                result = result[:-1] + f'{appendix}\n'
-                minimal_roi_result = rapidjson.dumps({
-                    str(k): v for k, v in (space_params or no_params).items()
-                }, default=str, indent=4, number_mode=rapidjson.NM_NATIVE)
-                result += f"minimal_roi = {minimal_roi_result}"
-            elif space == "trailing":
-                for k, v in (space_params or no_params).items():
-                    result += f"{k} = {v}{appendix}\n"
+        elif space == "roi":
+            result = result[:-1] + f'{appendix}\n'
+            minimal_roi_result = rapidjson.dumps({
+                str(k): v for k, v in (space_params or no_params).items()
+            }, default=str, indent=4, number_mode=rapidjson.NM_NATIVE)
+            result += f"minimal_roi = {minimal_roi_result}"
+        elif space == "trailing":
+            for k, v in (space_params or no_params).items():
+                result += f"{k} = {v}{appendix}\n"
 
-            else:
-                # Buy / sell parameters
+        else:
+            # Buy / sell parameters
 
-                result += f"{space}_params = {HyperoptTools._pprint_dict(space_params, no_params)}"
+            result += f"{space}_params = {HyperoptTools._pprint_dict(space_params, no_params)}"
 
-            result = result.replace("\n", "\n    ")
-            print(result)
+        result = result.replace("\n", "\n    ")
+        print(result)
 
     @staticmethod
     def _space_params(params, space: str, r: int = None) -> Dict:
-        d = params.get(space)
-        if d:
+        if d := params.get(space):
             # Round floats to `r` digits after the decimal point if requested
             return round_dict(d, r) if r else d
         return {}
@@ -286,7 +279,7 @@ class HyperoptTools():
 
     @staticmethod
     def is_best_loss(results, current_best_loss: float) -> bool:
-        return bool(results['loss'] < current_best_loss)
+        return results['loss'] < current_best_loss
 
     @staticmethod
     def format_results_explanation_string(results_metrics: Dict, stake_currency: str) -> str:
@@ -373,15 +366,21 @@ class HyperoptTools():
         trials['Trades'] = trials['Trades'].astype(str)
         # perc_multi = 1 if legacy_mode else 100
         trials['Epoch'] = trials['Epoch'].apply(
-            lambda x: '{}/{}'.format(str(x).rjust(len(str(total_epochs)), ' '), total_epochs)
+            lambda x: f"{str(x).rjust(len(str(total_epochs)), ' ')}/{total_epochs}"
         )
+
         trials['Avg profit'] = trials['Avg profit'].apply(
-            lambda x: f'{x:,.2%}'.rjust(7, ' ') if not isna(x) else "--".rjust(7, ' ')
+            lambda x: "--".rjust(7, ' ') if isna(x) else f'{x:,.2%}'.rjust(7, ' ')
         )
+
         trials['Avg duration'] = trials['Avg duration'].apply(
-            lambda x: f'{x:,.1f} m'.rjust(7, ' ') if isinstance(x, float) else f"{x}"
-                      if not isna(x) else "--".rjust(7, ' ')
+            lambda x: f'{x:,.1f} m'.rjust(7, ' ')
+            if isinstance(x, float)
+            else "--".rjust(7, ' ')
+            if isna(x)
+            else f"{x}"
         )
+
         trials['Objective'] = trials['Objective'].apply(
             lambda x: f'{x:,.5f}'.rjust(8, ' ') if x != 100000 else "N/A".rjust(8, ' ')
         )
@@ -417,12 +416,10 @@ class HyperoptTools():
             for i in range(len(trials)):
                 if trials.loc[i]['is_profit']:
                     for j in range(len(trials.loc[i]) - 3):
-                        trials.iat[i, j] = "{}{}{}".format(Fore.GREEN,
-                                                           str(trials.loc[i][j]), Fore.RESET)
+                        trials.iat[i, j] = f"{Fore.GREEN}{str(trials.loc[i][j])}{Fore.RESET}"
                 if trials.loc[i]['is_best'] and highlight_best:
                     for j in range(len(trials.loc[i]) - 3):
-                        trials.iat[i, j] = "{}{}{}".format(Style.BRIGHT,
-                                                           str(trials.loc[i][j]), Style.RESET_ALL)
+                        trials.iat[i, j] = f"{Style.BRIGHT}{str(trials.loc[i][j])}{Style.RESET_ALL}"
 
         trials = trials.drop(columns=['is_initial_point', 'is_best', 'is_profit', 'is_random'])
         if remove_header > 0:
@@ -437,7 +434,7 @@ class HyperoptTools():
                 trials.to_dict(orient='list'), tablefmt='psql',
                 headers='keys', stralign="right"
             )
-            table = "\n".join(table.split("\n")[0:remove_header])
+            table = "\n".join(table.split("\n")[:remove_header])
         else:
             table = tabulate.tabulate(
                 trials.to_dict(orient='list'), tablefmt='psql',
@@ -500,11 +497,13 @@ class HyperoptTools():
             lambda x: f'{x:,.8f}' if x != 0.0 else ""
         )
         trials['Profit'] = trials['Profit'].apply(
-            lambda x: f'{x:,.2f}' if not isna(x) else ""
+            lambda x: "" if isna(x) else f'{x:,.2f}'
         )
+
         trials['Avg profit'] = trials['Avg profit'].apply(
-            lambda x: f'{x * perc_multi:,.2f}%' if not isna(x) else ""
+            lambda x: "" if isna(x) else f'{x * perc_multi:,.2f}%'
         )
+
         trials['Objective'] = trials['Objective'].apply(
             lambda x: f'{x:,.5f}' if x != 100000 else ""
         )

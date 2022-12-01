@@ -24,5 +24,5 @@ class Bibox(Exchange):
     def _ccxt_config(self) -> Dict:
         # Parameters to add directly to ccxt sync/async initialization.
         config = {"has": {"fetchCurrencies": False}}
-        config.update(super()._ccxt_config)
+        config |= super()._ccxt_config
         return config

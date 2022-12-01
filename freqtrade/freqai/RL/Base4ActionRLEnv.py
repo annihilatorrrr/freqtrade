@@ -108,14 +108,38 @@ class Base4ActionRLEnv(BaseEnvironment):
         Determine if the signal is a trade signal
         e.g.: agent wants a Actions.Long_exit while it is in a Positions.short
         """
-        return not ((action == Actions.Neutral.value and self._position == Positions.Neutral) or
-                    (action == Actions.Neutral.value and self._position == Positions.Short) or
-                    (action == Actions.Neutral.value and self._position == Positions.Long) or
-                    (action == Actions.Short_enter.value and self._position == Positions.Short) or
-                    (action == Actions.Short_enter.value and self._position == Positions.Long) or
-                    (action == Actions.Exit.value and self._position == Positions.Neutral) or
-                    (action == Actions.Long_enter.value and self._position == Positions.Long) or
-                    (action == Actions.Long_enter.value and self._position == Positions.Short))
+        return (
+            (
+                action != Actions.Neutral.value
+                or self._position != Positions.Neutral
+            )
+            and (
+                action != Actions.Neutral.value
+                or self._position != Positions.Short
+            )
+            and (
+                action != Actions.Neutral.value or self._position != Positions.Long
+            )
+            and (
+                action != Actions.Short_enter.value
+                or self._position != Positions.Short
+            )
+            and (
+                action != Actions.Short_enter.value
+                or self._position != Positions.Long
+            )
+            and (
+                action != Actions.Exit.value or self._position != Positions.Neutral
+            )
+            and (
+                action != Actions.Long_enter.value
+                or self._position != Positions.Long
+            )
+            and (
+                action != Actions.Long_enter.value
+                or self._position != Positions.Short
+            )
+        )
 
     def _is_valid(self, action: int) -> bool:
         """
@@ -123,13 +147,14 @@ class Base4ActionRLEnv(BaseEnvironment):
         e.g.: agent wants a Actions.Long_exit while it is in a Positions.short
         """
         # Agent should only try to exit if it is in position
-        if action == Actions.Exit.value:
-            if self._position not in (Positions.Short, Positions.Long):
-                return False
+        if action == Actions.Exit.value and self._position not in (
+            Positions.Short,
+            Positions.Long,
+        ):
+            return False
 
         # Agent should only try to enter if it is not in position
-        if action in (Actions.Short_enter.value, Actions.Long_enter.value):
-            if self._position != Positions.Neutral:
-                return False
-
-        return True
+        return (
+            action not in (Actions.Short_enter.value, Actions.Long_enter.value)
+            or self._position == Positions.Neutral
+        )

@@ -142,7 +142,10 @@ class Backtesting:
             None if self.config.get('timerange') is None else str(self.config.get('timerange')))
 
         # Get maximum required startup period
-        self.required_startup = max([strat.startup_candle_count for strat in self.strategylist])
+        self.required_startup = max(
+            strat.startup_candle_count for strat in self.strategylist
+        )
+
         self.exchange.validate_required_startup_candles(self.required_startup, self.timeframe)
 
         if self.config.get('freqai', {}).get('enabled', False):
@@ -347,8 +350,7 @@ class Backtesting:
         self.progress.init_step(BacktestState.CONVERT, len(processed))
 
         # Create dict with data
-        for pair in processed.keys():
-            pair_data = processed[pair]
+        for pair, pair_data in processed.items():
             self.check_abort()
             self.progress.increment()
 
@@ -376,16 +378,20 @@ class Backtesting:
             for col in HEADERS[5:]:
                 tag_col = col in ('enter_tag', 'exit_tag')
                 if col in df_analyzed.columns:
-                    df_analyzed[col] = df_analyzed.loc[:, col].replace(
-                        [nan], [0 if not tag_col else None]).shift(1)
+                    df_analyzed[col] = (
+                        df_analyzed.loc[:, col]
+                        .replace([nan], [None if tag_col else 0])
+                        .shift(1)
+                    )
+
                 elif not df_analyzed.empty:
-                    df_analyzed[col] = 0 if not tag_col else None
+                    df_analyzed[col] = None if tag_col else 0
 
             df_analyzed = df_analyzed.drop(df_analyzed.head(1).index)
 
             # Convert from Pandas to list for performance reasons
             # (Looping Pandas is slow.)
-            data[pair] = df_analyzed[HEADERS].values.tolist() if not df_analyzed.empty else []
+            data[pair] = [] if df_analyzed.empty else df_analyzed[HEADERS].values.tolist()
         return data
 
     def _get_close_rate(self, row: Tuple, trade: LocalTrade, exit: ExitCheckTuple,
@@ -408,24 +414,24 @@ class Backtesting:
         # possibly due to a cancelled trade exit.
         # exit at open price.
         is_short = trade.is_short or False
-        leverage = trade.leverage or 1.0
-        side_1 = -1 if is_short else 1
         if exit.exit_type == ExitType.LIQUIDATION and trade.liquidation_price:
             stoploss_value = trade.liquidation_price
         else:
             stoploss_value = trade.stop_loss
 
-        if is_short:
-            if stoploss_value < row[LOW_IDX]:
-                return row[OPEN_IDX]
-        else:
-            if stoploss_value > row[HIGH_IDX]:
-                return row[OPEN_IDX]
-
+        if (
+            is_short
+            and stoploss_value < row[LOW_IDX]
+            or not is_short
+            and stoploss_value > row[HIGH_IDX]
+        ):
+            return row[OPEN_IDX]
         # Special case: trailing triggers within same candle as trade opened. Assume most
         # pessimistic price movement, which is moving just enough to arm stoploss and
         # immediately going down to stop price.
         if exit.exit_type == ExitType.TRAILING_STOP_LOSS and trade_dur == 0:
+            leverage = trade.leverage or 1.0
+            side_1 = -1 if is_short else 1
             if (
                 not self.strategy.use_custom_stoploss and self.strategy.trailing_stop
                 and self.strategy.trailing_only_offset_is_reached
@@ -460,59 +466,57 @@ class Backtesting:
         leverage = trade.leverage or 1.0
         side_1 = -1 if is_short else 1
         roi_entry, roi = self.strategy.min_roi_reached_entry(trade_dur)
-        if roi is not None and roi_entry is not None:
-            if roi == -1 and roi_entry % self.timeframe_min == 0:
-                # When force_exiting with ROI=-1, the roi time will always be equal to trade_dur.
-                # If that entry is a multiple of the timeframe (so on candle open)
-                # - we'll use open instead of close
-                return row[OPEN_IDX]
-
-            # - (Expected abs profit - open_rate - open_fee) / (fee_close -1)
-            roi_rate = trade.open_rate * roi / leverage
-            open_fee_rate = side_1 * trade.open_rate * (1 + side_1 * trade.fee_open)
-            close_rate = -(roi_rate + open_fee_rate) / (trade.fee_close - side_1 * 1)
-            if is_short:
-                is_new_roi = row[OPEN_IDX] < close_rate
-            else:
-                is_new_roi = row[OPEN_IDX] > close_rate
-            if (trade_dur > 0 and trade_dur == roi_entry
-                    and roi_entry % self.timeframe_min == 0
-                    and is_new_roi):
-                # new ROI entry came into effect.
-                # use Open rate if open_rate > calculated exit rate
-                return row[OPEN_IDX]
-
-            if (trade_dur == 0 and (
-                (
-                    is_short
-                    # Red candle (for longs)
-                    and row[OPEN_IDX] < row[CLOSE_IDX]  # Red candle
-                    and trade.open_rate > row[OPEN_IDX]  # trade-open above open_rate
-                    and close_rate < row[CLOSE_IDX]  # closes below close
-                )
-                or
-                (
-                    not is_short
-                    # green candle (for shorts)
-                    and row[OPEN_IDX] > row[CLOSE_IDX]  # green candle
-                    and trade.open_rate < row[OPEN_IDX]  # trade-open below open_rate
-                    and close_rate > row[CLOSE_IDX]  # closes above close
-                )
-            )):
-                # ROI on opening candles with custom pricing can only
-                # trigger if the entry was at Open or lower wick.
-                # details: https: // github.com/freqtrade/freqtrade/issues/6261
-                # If open_rate is < open, only allow exits below the close on red candles.
-                raise ValueError("Opening candle ROI on red candles.")
-
-            # Use the maximum between close_rate and low as we
-            # cannot exit outside of a candle.
-            # Applies when a new ROI setting comes in place and the whole candle is above that.
-            return min(max(close_rate, row[LOW_IDX]), row[HIGH_IDX])
-
-        else:
+        if roi is None or roi_entry is None:
             # This should not be reached...
             return row[OPEN_IDX]
+        if roi == -1 and roi_entry % self.timeframe_min == 0:
+            # When force_exiting with ROI=-1, the roi time will always be equal to trade_dur.
+            # If that entry is a multiple of the timeframe (so on candle open)
+            # - we'll use open instead of close
+            return row[OPEN_IDX]
+
+        # - (Expected abs profit - open_rate - open_fee) / (fee_close -1)
+        roi_rate = trade.open_rate * roi / leverage
+        open_fee_rate = side_1 * trade.open_rate * (1 + side_1 * trade.fee_open)
+        close_rate = -(roi_rate + open_fee_rate) / (trade.fee_close - side_1 * 1)
+        is_new_roi = (
+            row[OPEN_IDX] < close_rate if is_short else row[OPEN_IDX] > close_rate
+        )
+
+        if (trade_dur > 0 and trade_dur == roi_entry
+                and roi_entry % self.timeframe_min == 0
+                and is_new_roi):
+            # new ROI entry came into effect.
+            # use Open rate if open_rate > calculated exit rate
+            return row[OPEN_IDX]
+
+        if (trade_dur == 0 and (
+            (
+                is_short
+                # Red candle (for longs)
+                and row[OPEN_IDX] < row[CLOSE_IDX]  # Red candle
+                and trade.open_rate > row[OPEN_IDX]  # trade-open above open_rate
+                and close_rate < row[CLOSE_IDX]  # closes below close
+            )
+            or
+            (
+                not is_short
+                # green candle (for shorts)
+                and row[OPEN_IDX] > row[CLOSE_IDX]  # green candle
+                and trade.open_rate < row[OPEN_IDX]  # trade-open below open_rate
+                and close_rate > row[CLOSE_IDX]  # closes above close
+            )
+        )):
+            # ROI on opening candles with custom pricing can only
+            # trigger if the entry was at Open or lower wick.
+            # details: https: // github.com/freqtrade/freqtrade/issues/6261
+            # If open_rate is < open, only allow exits below the close on red candles.
+            raise ValueError("Opening candle ROI on red candles.")
+
+        # Use the maximum between close_rate and low as we
+        # cannot exit outside of a candle.
+        # Applies when a new ROI setting comes in place and the whole candle is above that.
+        return min(max(close_rate, row[LOW_IDX]), row[HIGH_IDX])
 
     def _get_adjust_trade_entry_for_candle(self, trade: LocalTrade, row: Tuple
                                            ) -> LocalTrade:
@@ -588,8 +592,7 @@ class Backtesting:
             low=row[LOW_IDX], high=row[HIGH_IDX]
         )
         for exit_ in exits:
-            t = self._get_exit_for_signal(trade, row, exit_)
-            if t:
+            if t := self._get_exit_for_signal(trade, row, exit_):
                 return t
         return None
 
@@ -794,8 +797,8 @@ class Backtesting:
         )
 
         # replace proposed rate if another rate was requested
-        propose_rate = requested_rate if requested_rate else propose_rate
-        stake_amount = requested_stake if requested_stake else stake_amount
+        propose_rate = requested_rate or propose_rate
+        stake_amount = requested_stake or stake_amount
 
         if not stake_amount:
             # In case of pos adjust, still return the original trade
@@ -803,7 +806,7 @@ class Backtesting:
             return trade
         time_in_force = self.strategy.order_time_in_force['entry']
 
-        if stake_amount and (not min_stake_amount or stake_amount > min_stake_amount):
+        if not min_stake_amount or stake_amount > min_stake_amount:
             self.order_id_counter += 1
             base_currency = self.exchange.get_pair_base_currency(pair)
             amount_p = (stake_amount / propose_rate) * leverage
@@ -815,14 +818,19 @@ class Backtesting:
             # Backcalculate actual stake amount.
             stake_amount = amount * propose_rate / leverage
 
-            if not pos_adjust:
-                # Confirm trade entry:
-                if not strategy_safe_wrapper(
-                        self.strategy.confirm_trade_entry, default_retval=True)(
-                            pair=pair, order_type=order_type, amount=amount, rate=propose_rate,
-                            time_in_force=time_in_force, current_time=current_time,
-                            entry_tag=entry_tag, side=direction):
-                    return trade
+            if not pos_adjust and not strategy_safe_wrapper(
+                self.strategy.confirm_trade_entry, default_retval=True
+            )(
+                pair=pair,
+                order_type=order_type,
+                amount=amount,
+                rate=propose_rate,
+                time_in_force=time_in_force,
+                current_time=current_time,
+                entry_tag=entry_tag,
+                side=direction,
+            ):
+                return trade
 
             is_short = (direction == 'short')
             # Necessary for Margin trading. Disabled until support is enabled.
@@ -905,7 +913,7 @@ class Backtesting:
         """
         Handling of left open trades at the end of backtesting
         """
-        for pair in open_trades.keys():
+        for pair in open_trades:
             for trade in list(open_trades[pair]):
                 if trade.open_order_id and trade.nr_of_successful_entries == 0:
                     # Ignore trade if entry-order did not fill yet
@@ -952,8 +960,7 @@ class Backtesting:
         Returns True if the trade should be deleted.
         """
         for order in [o for o in trade.orders if o.ft_is_open]:
-            oc = self.check_order_cancel(trade, order, current_time)
-            if oc:
+            if oc := self.check_order_cancel(trade, order, current_time):
                 # delete trade due to order timeout
                 return True
             elif oc is None and self.check_order_replace(trade, order, current_time, row):
@@ -971,20 +978,18 @@ class Backtesting:
                 False if it's Canceled
                 None if the order is still active.
         """
-        timedout = self.strategy.ft_check_timed_out(
-            trade,  # type: ignore[arg-type]
-            order, current_time)
-        if timedout:
+        if timedout := self.strategy.ft_check_timed_out(
+            trade, order, current_time  # type: ignore[arg-type]
+        ):
             if order.side == trade.entry_side:
                 self.timedout_entry_orders += 1
                 if trade.nr_of_successful_entries == 0:
                     # Remove trade due to entry timeout expiration.
                     return True
-                else:
-                    # Close additional entry order
-                    del trade.orders[trade.orders.index(order)]
-                    trade.open_order_id = None
-                    return False
+                # Close additional entry order
+                del trade.orders[trade.orders.index(order)]
+                trade.open_order_id = None
+                return False
             if order.side == trade.exit_side:
                 self.timedout_exit_orders += 1
                 # Close exit order and retry exiting on next signal.
@@ -1011,14 +1016,12 @@ class Backtesting:
                 entry_tag=trade.enter_tag, side=trade.trade_direction
             )  # default value is current order price
 
-            # cancel existing order whenever a new rate is requested (or None)
             if requested_rate == order.price:
                 # assumption: there can't be multiple open entry orders at any given time
                 return False
-            else:
-                del trade.orders[trade.orders.index(order)]
-                trade.open_order_id = None
-                self.canceled_entry_orders += 1
+            del trade.orders[trade.orders.index(order)]
+            trade.open_order_id = None
+            self.canceled_entry_orders += 1
 
             # place new order if result was not None
             if requested_rate:
@@ -1044,9 +1047,7 @@ class Backtesting:
             return None
 
         # Waits until the time-counter reaches the start of the data for this pair.
-        if row[DATE_IDX] > current_time:
-            return None
-        return row
+        return None if row[DATE_IDX] > current_time else row
 
     def backtest_loop(
             self, row: Tuple, pair: str, current_time: datetime, end_date: datetime,
@@ -1078,8 +1079,7 @@ class Backtesting:
             and trade_dir is not None
             and not PairLocks.is_pair_locked(pair, row[DATE_IDX], trade_dir)
         ):
-            trade = self._enter_trade(pair, row, trade_dir)
-            if trade:
+            if trade := self._enter_trade(pair, row, trade_dir):
                 # TODO: hacky workaround to avoid opening > max_open_trades
                 # This emulates previous behavior - not sure if this is correct
                 # Prevents entering if the trade-slot was freed in this candle

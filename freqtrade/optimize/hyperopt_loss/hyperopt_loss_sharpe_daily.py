@@ -36,7 +36,7 @@ class SharpeHyperOptLossDaily(IHyperOptLoss):
 
         # apply slippage per trade to profit_ratio
         results.loc[:, 'profit_ratio_after_slippage'] = \
-            results['profit_ratio'] - slippage_per_trade_ratio
+                results['profit_ratio'] - slippage_per_trade_ratio
 
         # create the index within the min_date and end max_date
         t_index = date_range(start=min_date, end=max_date, freq=resample_freq,

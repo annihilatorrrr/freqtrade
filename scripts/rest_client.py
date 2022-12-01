@@ -185,12 +185,10 @@ class FtRestClient():
     def ping(self):
         """simple ping"""
         configstatus = self.show_config()
-        if not configstatus:
+        if not configstatus or configstatus['state'] != "running":
             return {"status": "not_running"}
-        elif configstatus['state'] == "running":
-            return {"status": "pong"}
         else:
-            return {"status": "not_running"}
+            return {"status": "pong"}
 
     def logs(self, limit=None):
         """Show latest logs.
@@ -244,10 +242,11 @@ class FtRestClient():
         :param add: List of coins to add (example: "BNB/BTC")
         :return: json object
         """
-        if not args:
-            return self._get("blacklist")
-        else:
-            return self._post("blacklist", data={"blacklist": args})
+        return (
+            self._post("blacklist", data={"blacklist": args})
+            if args
+            else self._get("blacklist")
+        )
 
     def forcebuy(self, pair, price=None):
         """Buy an asset.
@@ -319,10 +318,13 @@ class FtRestClient():
         :param stake_currency: Only pairs that include this timeframe
         :return: json object
         """
-        return self._get("available_pairs", params={
-            "stake_currency": stake_currency if timeframe else '',
-            "timeframe": timeframe if timeframe else '',
-        })
+        return self._get(
+            "available_pairs",
+            params={
+                "stake_currency": stake_currency if timeframe else '',
+                "timeframe": timeframe or '',
+            },
+        )
 
     def pair_candles(self, pair, timeframe, limit=None):
         """Return live dataframe for <pair><timeframe>.
@@ -347,12 +349,15 @@ class FtRestClient():
         :param timerange: Timerange to get data for (same format than --timerange endpoints)
         :return: json object
         """
-        return self._get("pair_history", params={
-            "pair": pair,
-            "timeframe": timeframe,
-            "strategy": strategy,
-            "timerange": timerange if timerange else '',
-        })
+        return self._get(
+            "pair_history",
+            params={
+                "pair": pair,
+                "timeframe": timeframe,
+                "strategy": strategy,
+                "timerange": timerange or '',
+            },
+        )
 
     def sysinfo(self):
         """Provides system information (CPU, RAM usage)

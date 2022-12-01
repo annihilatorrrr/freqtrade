@@ -20,7 +20,7 @@ def calculate_market_change(data: Dict[str, pd.DataFrame], column: str = "close"
     :return:
     """
     tmp_means = []
-    for pair, df in data.items():
+    for df in data.values():
         start = df[column].dropna().iloc[0]
         end = df[column].dropna().iloc[-1]
         tmp_means.append((end - start) / start)
@@ -107,13 +107,12 @@ def calculate_underwater(trades: pd.DataFrame, *, date_col: str = 'close_date',
     if len(trades) == 0:
         raise ValueError("Trade dataframe empty.")
     profit_results = trades.sort_values(date_col).reset_index(drop=True)
-    max_drawdown_df = _calc_drawdown_series(
+    return _calc_drawdown_series(
         profit_results,
         date_col=date_col,
         value_col=value_col,
-        starting_balance=starting_balance)
-
-    return max_drawdown_df
+        starting_balance=starting_balance,
+    )
 
 
 def calculate_max_drawdown(trades: pd.DataFrame, *, date_col: str = 'close_date',

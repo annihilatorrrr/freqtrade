@@ -101,11 +101,10 @@ def load_data(datadir: Path,
                                  )
         if not hist.empty:
             result[pair] = hist
-        else:
-            if candle_type is CandleType.FUNDING_RATE and user_futures_funding_rate is not None:
-                logger.warn(f"{pair} using user specified [{user_futures_funding_rate}]")
-            elif candle_type not in (CandleType.SPOT, CandleType.FUTURES):
-                result[pair] = DataFrame(columns=["date", "open", "close", "high", "low", "volume"])
+        elif candle_type is CandleType.FUNDING_RATE and user_futures_funding_rate is not None:
+            logger.warn(f"{pair} using user specified [{user_futures_funding_rate}]")
+        elif candle_type not in (CandleType.SPOT, CandleType.FUTURES):
+            result[pair] = DataFrame(columns=["date", "open", "close", "high", "low", "volume"])
 
     if fail_without_data and not result:
         raise OperationalException("No data found. Terminating.")
@@ -173,11 +172,10 @@ def _load_cached_data_for_updating(
         if not prepend and start and start < data.iloc[0]['date']:
             # Earlier data than existing data requested, redownload all
             data = DataFrame(columns=DEFAULT_DATAFRAME_COLUMNS)
+        elif prepend:
+            end = data.iloc[0]['date']
         else:
-            if prepend:
-                end = data.iloc[0]['date']
-            else:
-                start = data.iloc[-1]['date']
+            start = data.iloc[-1]['date']
     start_ms = int(start.timestamp() * 1000) if start else None
     end_ms = int(end.timestamp() * 1000) if end else None
     return data, start_ms, end_ms
@@ -211,9 +209,10 @@ def _download_pair_history(pair: str, *,
     data_handler = get_datahandler(datadir, data_handler=data_handler)
 
     try:
-        if erase:
-            if data_handler.ohlcv_purge(pair, timeframe, candle_type=candle_type):
-                logger.info(f'Deleting existing data for pair {pair}, {timeframe}, {candle_type}.')
+        if erase and data_handler.ohlcv_purge(
+            pair, timeframe, candle_type=candle_type
+        ):
+            logger.info(f'Deleting existing data for pair {pair}, {timeframe}, {candle_type}.')
 
         data, since_ms, until_ms = _load_cached_data_for_updating(
             pair, timeframe, timerange,
@@ -227,21 +226,32 @@ def _download_pair_history(pair: str, *,
                     f'{format_ms_time(until_ms) if until_ms else "now"}'
                     )
 
-        logger.debug("Current Start: %s",
-                     f"{data.iloc[0]['date']:DATETIME_PRINT_FORMAT}" if not data.empty else 'None')
-        logger.debug("Current End: %s",
-                     f"{data.iloc[-1]['date']:DATETIME_PRINT_FORMAT}" if not data.empty else 'None')
+        logger.debug(
+            "Current Start: %s",
+            'None'
+            if data.empty
+            else f"{data.iloc[0]['date']:DATETIME_PRINT_FORMAT}",
+        )
+
+        logger.debug(
+            "Current End: %s",
+            'None'
+            if data.empty
+            else f"{data.iloc[-1]['date']:DATETIME_PRINT_FORMAT}",
+        )
+
 
         # Default since_ms to 30 days if nothing is given
-        new_data = exchange.get_historic_ohlcv(pair=pair,
-                                               timeframe=timeframe,
-                                               since_ms=since_ms if since_ms else
-                                               arrow.utcnow().shift(
-                                                   days=-new_pairs_days).int_timestamp * 1000,
-                                               is_new_pair=data.empty,
-                                               candle_type=candle_type,
-                                               until_ms=until_ms if until_ms else None
-                                               )
+        new_data = exchange.get_historic_ohlcv(
+            pair=pair,
+            timeframe=timeframe,
+            since_ms=since_ms
+            or arrow.utcnow().shift(days=-new_pairs_days).int_timestamp * 1000,
+            is_new_pair=data.empty,
+            candle_type=candle_type,
+            until_ms=until_ms or None,
+        )
+
         # TODO: Maybe move parsing to exchange class (?)
         new_dataframe = ohlcv_to_dataframe(new_data, timeframe, pair,
                                            fill_missing=False, drop_incomplete=True)
@@ -253,10 +263,20 @@ def _download_pair_history(pair: str, *,
             data = clean_ohlcv_dataframe(concat([data, new_dataframe], axis=0), timeframe, pair,
                                          fill_missing=False, drop_incomplete=False)
 
-        logger.debug("New  Start: %s",
-                     f"{data.iloc[0]['date']:DATETIME_PRINT_FORMAT}" if not data.empty else 'None')
-        logger.debug("New End: %s",
-                     f"{data.iloc[-1]['date']:DATETIME_PRINT_FORMAT}" if not data.empty else 'None')
+        logger.debug(
+            "New  Start: %s",
+            'None'
+            if data.empty
+            else f"{data.iloc[0]['date']:DATETIME_PRINT_FORMAT}",
+        )
+
+        logger.debug(
+            "New End: %s",
+            'None'
+            if data.empty
+            else f"{data.iloc[-1]['date']:DATETIME_PRINT_FORMAT}",
+        )
+
 
         data_handler.ohlcv_store(pair, timeframe, data=data, candle_type=candle_type)
         return True
@@ -402,9 +422,8 @@ def refresh_backtest_trades_data(exchange: Exchange, pairs: List[str], datadir: 
             logger.info(f"Skipping pair {pair}...")
             continue
 
-        if erase:
-            if data_handler.trades_purge(pair):
-                logger.info(f'Deleting existing data for pair {pair}.')
+        if erase and data_handler.trades_purge(pair):
+            logger.info(f'Deleting existing data for pair {pair}.')
 
         logger.info(f'Downloading trades for pair {pair}.')
         _download_trades_history(exchange=exchange,
@@ -434,9 +453,10 @@ def convert_trades_to_ohlcv(
     for pair in pairs:
         trades = data_handler_trades.trades_load(pair)
         for timeframe in timeframes:
-            if erase:
-                if data_handler_ohlcv.ohlcv_purge(pair, timeframe, candle_type=candle_type):
-                    logger.info(f'Deleting existing data for pair {pair}, interval {timeframe}.')
+            if erase and data_handler_ohlcv.ohlcv_purge(
+                pair, timeframe, candle_type=candle_type
+            ):
+                logger.info(f'Deleting existing data for pair {pair}, interval {timeframe}.')
             try:
                 ohlcv = trades_to_ohlcv(trades, timeframe)
                 # Store ohlcv

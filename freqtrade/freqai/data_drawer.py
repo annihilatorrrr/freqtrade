@@ -132,11 +132,9 @@ class FreqaiDataDrawer:
         """
         Locate and load a previously saved global metadata in present model folder.
         """
-        exists = self.global_metadata_path.is_file()
-        if exists:
+        if exists := self.global_metadata_path.is_file():
             with open(self.global_metadata_path, "r") as fp:
-                metatada_dict = rapidjson.load(fp, number_mode=rapidjson.NM_NATIVE)
-                return metatada_dict
+                return rapidjson.load(fp, number_mode=rapidjson.NM_NATIVE)
         return {}
 
     def load_drawer_from_disk(self):
@@ -145,8 +143,7 @@ class FreqaiDataDrawer:
         present model folder.
         Load any existing metric tracker that may be present.
         """
-        exists = self.pair_dictionary_path.is_file()
-        if exists:
+        if exists := self.pair_dictionary_path.is_file():
             with open(self.pair_dictionary_path, "r") as fp:
                 self.pair_dict = rapidjson.load(fp, number_mode=rapidjson.NM_NATIVE)
         elif not self.follow_mode:
@@ -163,8 +160,7 @@ class FreqaiDataDrawer:
         wants to collect metrics.
         """
         if self.freqai_info.get('write_metrics_to_disk', False):
-            exists = self.metric_tracker_path.is_file()
-            if exists:
+            if exists := self.metric_tracker_path.is_file():
                 with open(self.metric_tracker_path, "r") as fp:
                     self.metric_tracker = rapidjson.load(fp, number_mode=rapidjson.NM_NATIVE)
                 logger.info("Loading existing metric tracker from disk.")
@@ -255,9 +251,7 @@ class FreqaiDataDrawer:
 
         whitelist_pairs = self.config.get("exchange", {}).get("pair_whitelist")
 
-        exists = self.follower_dict_path.is_file()
-
-        if exists:
+        if exists := self.follower_dict_path.is_file():
             logger.info("Found an existing follower dictionary")
 
         for pair in whitelist_pairs:
@@ -307,12 +301,10 @@ class FreqaiDataDrawer:
 
     def set_pair_dict_info(self, metadata: dict) -> None:
         pair_in_dict = self.pair_dict.get(metadata["pair"])
-        if pair_in_dict:
-            return
-        else:
+        if not pair_in_dict:
             self.pair_dict[metadata["pair"]] = self.empty_pair_dict.copy()
 
-            return
+        return
 
     def set_initial_return_values(self, pair: str, pred_df: DataFrame) -> None:
         """
@@ -433,13 +425,11 @@ class FreqaiDataDrawer:
             result = pattern.match(str(dir.name))
             if result is None:
                 continue
-            coin = result.group(1)
-            timestamp = result.group(2)
+            coin = result[1]
+            timestamp = result[2]
 
             if coin not in delete_dict:
-                delete_dict[coin] = {}
-                delete_dict[coin]["num_folders"] = 1
-                delete_dict[coin]["timestamps"] = {int(timestamp): dir}
+                delete_dict[coin] = {"num_folders": 1, "timestamps": {int(timestamp): dir}}
             else:
                 delete_dict[coin]["num_folders"] += 1
                 delete_dict[coin]["timestamps"][int(timestamp)] = dir
@@ -741,7 +731,6 @@ class FreqaiDataDrawer:
         end_date = max(all_pairs_end_dates)
         # add 1 day to string timerange to ensure BT module will load all dataframe data
         end_date = end_date + timedelta(days=1)
-        backtesting_timerange = TimeRange(
+        return TimeRange(
             'date', 'date', int(start_date.timestamp()), int(end_date.timestamp())
         )
-        return backtesting_timerange

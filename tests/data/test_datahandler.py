@@ -320,14 +320,12 @@ def test_hdf5datahandler_trades_load(testdatadir):
     # Check that ID is None (If it's nan, it's wrong)
     assert trades2[0][2] is None
 
-    # unfiltered load has trades before starttime
-    assert len([t for t in trades if t[0] < timerange.startts * 1000]) >= 0
     # filtered list does not have trades before starttime
-    assert len([t for t in trades2 if t[0] < timerange.startts * 1000]) == 0
+    assert not [t for t in trades2 if t[0] < timerange.startts * 1000]
     # unfiltered load has trades after endtime
-    assert len([t for t in trades if t[0] > timerange.stopts * 1000]) > 0
+    assert [t for t in trades if t[0] > timerange.stopts * 1000]
     # filtered list does not have trades after endtime
-    assert len([t for t in trades2 if t[0] > timerange.stopts * 1000]) == 0
+    assert not [t for t in trades2 if t[0] > timerange.stopts * 1000]
 
 
 def test_hdf5datahandler_trades_store(testdatadir, tmpdir):

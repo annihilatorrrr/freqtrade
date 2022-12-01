@@ -40,10 +40,7 @@ class Bybit(Exchange):
         # ccxt defaults to swap mode.
         config = {}
         if self.trading_mode == TradingMode.SPOT:
-            config.update({
-                "options": {
-                    "defaultType": "spot"
-                }
-            })
-        config.update(super()._ccxt_config)
+            config["options"] = {"defaultType": "spot"}
+
+        config |= super()._ccxt_config
         return config
